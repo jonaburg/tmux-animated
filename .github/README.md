@@ -1,5 +1,7 @@
 # tmux-animated
 
+![tmux-animated demo](../tmux-anim.gif)
+
 A patch on top of upstream tmux that adds smooth animations for
 window switches, pane splits, resizes, and closes.
 
@@ -79,7 +81,7 @@ Example `~/.tmux.conf`:
 
 ```tmux
 set -g animation-duration 150
-set -g animation-pane-duration 90
+set -g animation-pane-duration 150
 set -g animation-easing smoothdamp
 ```
 
