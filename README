@@ -1,5 +1,7 @@
 # tmux-animated
 
+![tmux-animated demo](tmux-anim.gif)
+
 A patch on top of upstream tmux that adds smooth animations for
 window switches, pane splits, resizes, and closes.
 
