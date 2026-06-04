@@ -1,95 +1,107 @@
-# Welcome to tmux!
+# tmux-animated
 
-tmux is a terminal multiplexer: it enables a number of terminals to be created,
-accessed, and controlled from a single screen. tmux may be detached from a
-screen and continue running in the background, then later reattached.
+A patch on top of upstream tmux that adds smooth animations for
+window switches, pane splits, resizes, and closes.
 
-This release runs on OpenBSD, FreeBSD, NetBSD, Linux, macOS and Solaris.
+## What it animates
 
-## Dependencies
+- **Window switching** — the two windows' pane contents slide; the
+  active-window highlight in the status bar slides to its new tab.
+  In-flight retargeting: mash `next-window` repeatedly and the slide
+  rebases continuously instead of queueing.
+- **Pane resize** — borders smooth-move from old to new position.
+- **Pane split** — the new pane grows from zero into its final bounds.
+- **Pane close** — the dying pane shrinks toward its centre while
+  neighbours expand into the space. Works for `kill-pane` AND for
+  shell exits (e.g. `Ctrl-D`).
 
-tmux depends on [libevent](https://libevent.org) 2.x, available from [this
-page](https://github.com/libevent/libevent/releases/latest).
+## Install
 
-It also depends on [ncurses](https://www.gnu.org/software/ncurses/), available
-from [this page](https://invisible-mirror.net/archives/ncurses/).
+### Homebrew (macOS / Linuxbrew)
 
-To build tmux, a C compiler (for example gcc or clang), make, pkg-config and a
-suitable yacc (yacc or bison) are needed.
+```bash
+brew tap jonaburg/tmux-animated
+brew install tmux-animated
+```
 
-## Installation
+Installs as `tmux-animated`, leaving any existing `tmux` binary in
+place. Run `tmux-animated` instead of `tmux`, or alias it.
 
-### Binary packages
+### One-shot install script
 
-Some platforms provide binary packages for tmux, although these are sometimes
-out of date. Examples are listed on
-[this page](https://github.com/tmux/tmux/wiki/Installing).
+```bash
+curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/install.sh | bash
+```
 
-### From release tarball
+Clones tmux at the tracked upstream version, applies the patch, builds,
+and installs to `/usr/local/bin/tmux-animated`. Requires `cc`,
+`autoconf`, `automake`, `pkg-config`, `libevent`, `ncurses`.
 
-To build and install tmux from a release tarball, use:
+### Apply the patch to your own tmux build
 
-~~~bash
-./configure && make
-sudo make install
-~~~
-
-tmux can use the utempter library to update utmp(5), if it is installed - run
-configure with `--enable-utempter` to enable this.
-
-For more detailed instructions on building and installing tmux, see
-[this page](https://github.com/tmux/tmux/wiki/Installing).
-
-### From version control
-
-To get and build the latest from version control - note that this requires
-`autoconf`, `automake` and `pkg-config`:
-
-~~~bash
+```bash
 git clone https://github.com/tmux/tmux.git
 cd tmux
-sh autogen.sh
-./configure && make
-~~~
+git checkout <commit-the-patch-was-made-against>
+curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/patches/tmux-animated-next-3.7.patch | patch -p1
+./autogen.sh && ./configure && make
+```
 
-## Contributing
+The patch in `patches/` should be regenerated against each upstream tmux
+release; the filename indicates which.
 
-Bug reports, feature suggestions and especially code contributions are most
-welcome. Please send by email to:
+### Build from source
 
-tmux-users@googlegroups.com
+```bash
+git clone -b animations https://github.com/jonaburg/tmux-animated.git
+cd tmux-animated
+./autogen.sh && ./configure && make
+sudo make install
+```
 
-Or open a GitHub issue or pull request. **Please read [this
-document](CONTRIBUTING.md) before opening an issue.**
+## Configure
 
-There is [a list of suggestions for contributions](https://github.com/tmux/tmux/wiki/Contributing).
-Please feel free to ask on the mailing list if you're thinking of working on something or need
-further information.
+These session options control behaviour:
 
-## Documentation
+| Option | Default | Meaning |
+|---|---|---|
+| `animation-enable` | `on` | Master switch. Off disables all animations. |
+| `animation-window-switch` | `slide` | `slide` or `off`. |
+| `animation-pane-layout` | `on` | Animate split / resize / close. |
+| `animation-duration` | `120` | Window slide duration (ms). |
+| `animation-pane-duration` | `80` | Pane animation duration (ms). |
+| `animation-easing` | `smoothdamp` | `smoothdamp`, `linear`, or `ease-in-out`. |
+| `animation-tau` | `40` | Smoothdamp time constant (ms). |
+| `animation-frame-interval` | `8` | Target frame interval (ms). |
+| `animation-status-highlight` | `on` | Animate the active-window tab highlight. |
 
-For documentation on using tmux, see the tmux.1 manpage. View it from the
-source tree with:
+Example `~/.tmux.conf`:
 
-~~~bash
-nroff -mdoc tmux.1|less
-~~~
+```tmux
+set -g animation-duration 150
+set -g animation-pane-duration 90
+set -g animation-easing smoothdamp
+```
 
-A small example configuration is in `example_tmux.conf`.
+If you keep the same config for both `tmux` and `tmux-animated`, vanilla
+tmux will warn about unknown options. Wrap them in an `if-shell`:
 
-And a bash(1) completion file at:
+```tmux
+if-shell '[ "$(tmux -V | awk "{print \$1}")" = "tmux-animated" ]' \
+    'set -g animation-duration 150'
+```
 
-https://github.com/scop/bash-completion/blob/main/completions-core/tmux.bash
+## Caveats
 
-For debugging, run tmux with `-v` or `-vv` to generate server and client log
-files in the current directory.
+- Per-frame paint cost scales with painted cells. On a typical 200×60
+  terminal at 120fps this is negligible; on a slow SSH link or very
+  large terminal you may want to bump `animation-frame-interval`
+  (lower fps) or reduce durations.
+- The default Homebrew install does not replace your system `tmux`.
+- Animations don't fire for control-mode clients (`tmux -CC`) or for
+  control sockets — they only run when the client has a real tty.
 
-## Support
 
-The tmux mailing list for general discussion and bug reports is:
+## License
 
-https://groups.google.com/forum/#!forum/tmux-users
-
-Subscribe by sending an email to:
-
-tmux-users+subscribe@googlegroups.com
+Same as upstream tmux (ISC).
