@@ -81,7 +81,7 @@ Example `~/.tmux.conf`:
 
 ```tmux
 set -g animation-duration 150
-set -g animation-pane-duration 90
+set -g animation-pane-duration 150
 set -g animation-easing smoothdamp
 ```
 
