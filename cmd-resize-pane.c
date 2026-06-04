@@ -80,10 +80,12 @@ cmd_resize_pane_exec(struct cmd *self, struct cmdq_item *item)
 		return (cmd_resize_pane_mouse_update(self, item));
 
 	if (args_has(args, 'Z')) {
+		animation_begin_pane_layout(cmdq_get_client(item), w, NULL);
 		if (w->flags & WINDOW_ZOOMED)
 			window_unzoom(w, 1);
 		else
 			window_zoom(wp);
+		animation_commit_pane_layout(cmdq_get_client(item), w);
 		server_redraw_window(w);
 		return (CMD_RETURN_NORMAL);
 	}

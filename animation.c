@@ -1029,23 +1029,49 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 		}
 	}
 
-	for (i = 0; i < a->pl_n; i++) {
-		pa = &a->pl_panes[i];
-		lx = (int)lround(pa->src_x + t * (pa->tgt_x - pa->src_x));
-		ly = (int)lround(pa->src_y + t * (pa->tgt_y - pa->src_y));
-		lw = (int)lround(pa->src_w + t * (pa->tgt_w - pa->src_w));
-		lh = (int)lround(pa->src_h + t * (pa->tgt_h - pa->src_h));
+	{
+		int	active_id = -1;
+		size_t	pass;
 
-		if (pa->phase == PANE_DYING) {
-			animation_paint_pane_clipped(c, pa->snapshot,
-			    NULL, lx, ly, lw, lh);
-		} else {
-			wp_live = animation_find_pane(a->pl_window,
-			    pa->pane_id);
-			if (wp_live == NULL || wp_live->screen == NULL)
-				continue;
-			animation_paint_pane_clipped(c, wp_live->screen,
-			    &wp_live->palette, lx, ly, lw, lh);
+		if (a->pl_window != NULL && a->pl_window->active != NULL)
+			active_id = (int)a->pl_window->active->id;
+
+		/* Two passes: non-active panes first, active pane last so it
+		 * draws on top during zoom/unzoom. Otherwise a static
+		 * neighbor pane (src==tgt) overwrites the growing zoomed pane
+		 * when it appears later in TAILQ order. */
+		for (pass = 0; pass < 2; pass++) {
+			for (i = 0; i < a->pl_n; i++) {
+				pa = &a->pl_panes[i];
+				if (pass == 0 && pa->pane_id == active_id)
+					continue;
+				if (pass == 1 && pa->pane_id != active_id)
+					continue;
+
+				lx = (int)lround(pa->src_x +
+				    t * (pa->tgt_x - pa->src_x));
+				ly = (int)lround(pa->src_y +
+				    t * (pa->tgt_y - pa->src_y));
+				lw = (int)lround(pa->src_w +
+				    t * (pa->tgt_w - pa->src_w));
+				lh = (int)lround(pa->src_h +
+				    t * (pa->tgt_h - pa->src_h));
+
+				if (pa->phase == PANE_DYING) {
+					animation_paint_pane_clipped(c,
+					    pa->snapshot, NULL, lx, ly, lw, lh);
+				} else {
+					wp_live = animation_find_pane(
+					    a->pl_window, pa->pane_id);
+					if (wp_live == NULL ||
+					    wp_live->screen == NULL)
+						continue;
+					animation_paint_pane_clipped(c,
+					    wp_live->screen,
+					    &wp_live->palette,
+					    lx, ly, lw, lh);
+				}
+			}
 		}
 	}
 }
