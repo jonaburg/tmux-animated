@@ -356,6 +356,22 @@ const struct options_table_entry options_table[] = {
 	  .text = "Duration in ms of pane layout animations."
 	},
 
+	{ .name = "animation-popup",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 1,
+	  .text = "Animate popup open and close (grow/shrink)."
+	},
+
+	{ .name = "animation-popup-duration",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .minimum = 0,
+	  .maximum = 5000,
+	  .default_num = 120,
+	  .text = "Duration in ms of popup open/close animations."
+	},
+
 	{ .name = "backspace",
 	  .type = OPTIONS_TABLE_KEY,
 	  .scope = OPTIONS_TABLE_SERVER,

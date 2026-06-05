@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <math.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,7 +74,21 @@ struct popup_data {
 	u_int			  lx;
 	u_int			  ly;
 	u_int			  lb;
+
+	int			  anim_active;
+	int			  anim_closing;
+	int			  anim_src_px, anim_src_py, anim_src_sx, anim_src_sy;
+	int			  anim_tgt_px, anim_tgt_py, anim_tgt_sx, anim_tgt_sy;
+	uint64_t		  anim_start_ms;
+	uint64_t		  anim_duration_ms;
+	struct event		  anim_timer;
+	int			  anim_timer_set;
 };
+
+static void	popup_anim_frame_cb(int, short, void *);
+static void	popup_anim_start_close(struct popup_data *);
+static int	popup_anim_bounds(struct popup_data *, u_int *, u_int *,
+		    u_int *, u_int *);
 
 struct popup_editor {
 	char			*path;
@@ -103,9 +118,196 @@ static const struct menu_item popup_internal_menu_items[] = {
 	{ NULL, KEYC_NONE, NULL }
 };
 
+/* Cubic ease-in-out on t in [0,1]. */
+static double
+popup_anim_ease(double t)
+{
+	if (t < 0.5)
+		return (4.0 * t * t * t);
+	t = 2.0 * t - 2.0;
+	return (0.5 * t * t * t + 1.0);
+}
+
+/*
+ * Compute the current on-screen bounds. Returns 1 if any animation is
+ * active (caller will redraw on a timer), 0 if popup is in steady state.
+ */
+static int
+popup_anim_bounds(struct popup_data *pd, u_int *px, u_int *py, u_int *sx,
+    u_int *sy)
+{
+	uint64_t	now;
+	double		t, e;
+	int		cx, cy, cw, ch;
+
+	if (!pd->anim_active) {
+		*px = pd->px;
+		*py = pd->py;
+		*sx = pd->sx;
+		*sy = pd->sy;
+		return (0);
+	}
+
+	now = get_timer();
+	if (pd->anim_duration_ms == 0)
+		t = 1.0;
+	else
+		t = (double)(now - pd->anim_start_ms) /
+		    (double)pd->anim_duration_ms;
+	if (t < 0) t = 0;
+	if (t > 1) t = 1;
+	e = popup_anim_ease(t);
+
+	cx = (int)lround(pd->anim_src_px + e *
+	    (pd->anim_tgt_px - pd->anim_src_px));
+	cy = (int)lround(pd->anim_src_py + e *
+	    (pd->anim_tgt_py - pd->anim_src_py));
+	cw = (int)lround(pd->anim_src_sx + e *
+	    (pd->anim_tgt_sx - pd->anim_src_sx));
+	ch = (int)lround(pd->anim_src_sy + e *
+	    (pd->anim_tgt_sy - pd->anim_src_sy));
+
+	if (cw < 0) cw = 0;
+	if (ch < 0) ch = 0;
+	if (cx < 0) cx = 0;
+	if (cy < 0) cy = 0;
+
+	*px = (u_int)cx;
+	*py = (u_int)cy;
+	*sx = (u_int)cw;
+	*sy = (u_int)ch;
+	return (1);
+}
+
+static void
+popup_anim_start_open(struct popup_data *pd)
+{
+	struct session	*s;
+	struct timeval	 tv;
+	int		 cx, cy;
+
+	if (pd->c == NULL || (s = pd->c->session) == NULL)
+		return;
+	if (!options_get_number(s->options, "animation-enable"))
+		return;
+	if (!options_get_number(s->options, "animation-popup"))
+		return;
+	pd->anim_duration_ms =
+	    options_get_number(s->options, "animation-popup-duration");
+	if (pd->anim_duration_ms == 0)
+		return;
+
+	cx = (int)pd->px + (int)pd->sx / 2;
+	cy = (int)pd->py + (int)pd->sy / 2;
+
+	pd->anim_src_px = cx;
+	pd->anim_src_py = cy;
+	pd->anim_src_sx = 0;
+	pd->anim_src_sy = 0;
+	pd->anim_tgt_px = pd->px;
+	pd->anim_tgt_py = pd->py;
+	pd->anim_tgt_sx = pd->sx;
+	pd->anim_tgt_sy = pd->sy;
+
+	pd->anim_active = 1;
+	pd->anim_closing = 0;
+	pd->anim_start_ms = get_timer();
+
+	evtimer_set(&pd->anim_timer, popup_anim_frame_cb, pd);
+	pd->anim_timer_set = 1;
+	tv.tv_sec = 0;
+	tv.tv_usec = 16 * 1000L;
+	evtimer_add(&pd->anim_timer, &tv);
+}
+
+static void
+popup_anim_start_close(struct popup_data *pd)
+{
+	struct session	*s;
+	struct timeval	 tv;
+	u_int		 cur_px, cur_py, cur_sx, cur_sy;
+	int		 cx, cy;
+
+	if (pd->anim_closing)
+		return;
+	if (pd->c == NULL || (s = pd->c->session) == NULL)
+		goto snap;
+	if (!options_get_number(s->options, "animation-enable"))
+		goto snap;
+	if (!options_get_number(s->options, "animation-popup"))
+		goto snap;
+	pd->anim_duration_ms =
+	    options_get_number(s->options, "animation-popup-duration");
+	if (pd->anim_duration_ms == 0)
+		goto snap;
+
+	popup_anim_bounds(pd, &cur_px, &cur_py, &cur_sx, &cur_sy);
+
+	cx = (int)pd->px + (int)pd->sx / 2;
+	cy = (int)pd->py + (int)pd->sy / 2;
+
+	pd->anim_src_px = (int)cur_px;
+	pd->anim_src_py = (int)cur_py;
+	pd->anim_src_sx = (int)cur_sx;
+	pd->anim_src_sy = (int)cur_sy;
+	pd->anim_tgt_px = cx;
+	pd->anim_tgt_py = cy;
+	pd->anim_tgt_sx = 0;
+	pd->anim_tgt_sy = 0;
+
+	pd->anim_active = 1;
+	pd->anim_closing = 1;
+	pd->anim_start_ms = get_timer();
+
+	if (!pd->anim_timer_set) {
+		evtimer_set(&pd->anim_timer, popup_anim_frame_cb, pd);
+		pd->anim_timer_set = 1;
+	}
+	tv.tv_sec = 0;
+	tv.tv_usec = 16 * 1000L;
+	evtimer_add(&pd->anim_timer, &tv);
+	server_redraw_client(pd->c);
+	return;
+
+snap:
+	server_client_clear_overlay(pd->c);
+}
+
+static void
+popup_anim_frame_cb(__unused int fd, __unused short ev, void *arg)
+{
+	struct popup_data	*pd = arg;
+	uint64_t		 now;
+	struct timeval		 tv;
+
+	if (!pd->anim_active)
+		return;
+
+	now = get_timer();
+	if (now - pd->anim_start_ms >= pd->anim_duration_ms) {
+		int closing = pd->anim_closing;
+		pd->anim_active = 0;
+		pd->anim_closing = 0;
+		if (closing) {
+			server_client_clear_overlay(pd->c);
+			return;
+		}
+		server_redraw_client(pd->c);
+		return;
+	}
+
+	server_redraw_client(pd->c);
+	tv.tv_sec = 0;
+	tv.tv_usec = 16 * 1000L;
+	evtimer_add(&pd->anim_timer, &tv);
+}
+
 static void
 popup_free(struct popup_data *pd)
 {
+	if (pd->anim_timer_set && event_initialized(&pd->anim_timer))
+		evtimer_del(&pd->anim_timer);
+
 	server_client_unref(pd->c);
 
 	if (pd->job != NULL)
@@ -222,6 +424,9 @@ popup_mode_cb(__unused struct client *c, void *data, u_int *cx, u_int *cy)
 	if (pd->md != NULL)
 		return (menu_mode_cb(c, pd->md, cx, cy));
 
+	if (pd->anim_active)
+		return (NULL);
+
 	if (pd->border_lines == BOX_LINES_NONE) {
 		*cx = pd->px + pd->s.cx;
 		*cy = pd->py + pd->s.cy;
@@ -281,8 +486,18 @@ popup_check_cb(struct client* c, void *data, u_int px, u_int py, u_int nx)
 		return (r);
 	}
 
-	server_client_overlay_range(pd->px, pd->py, pd->sx, pd->sy, px, py, nx,
-	    r);
+	{
+		u_int	apx, apy, asx, asy;
+		popup_anim_bounds(pd, &apx, &apy, &asx, &asy);
+		if (asx == 0 || asy == 0) {
+			server_client_ensure_ranges(r, 1);
+			r->ranges[0].px = px;
+			r->ranges[0].nx = nx;
+			r->used = 1;
+			return (r);
+		}
+		server_client_overlay_range(apx, apy, asx, asy, px, py, nx, r);
+	}
 	return (r);
 }
 
@@ -293,13 +508,25 @@ popup_draw_cb(struct client *c, void *data, struct screen_redraw_ctx *rctx)
 	struct tty		*tty = &c->tty;
 	struct screen		 s;
 	struct screen_write_ctx	 ctx;
-	u_int			 i, px = pd->px, py = pd->py;
+	u_int			 i, px, py, sx, sy;
 	struct colour_palette	*palette = &pd->palette;
 	struct grid_cell	 defaults;
 
 	popup_reapply_styles(pd);
 
-	screen_init(&s, pd->sx, pd->sy, 0);
+	popup_anim_bounds(pd, &px, &py, &sx, &sy);
+	if (sx == 0 || sy == 0) {
+		if (pd->md != NULL) {
+			c->overlay_check = NULL;
+			c->overlay_data = NULL;
+			menu_draw_cb(c, pd->md, rctx);
+		}
+		c->overlay_check = popup_check_cb;
+		c->overlay_data = pd;
+		return;
+	}
+
+	screen_init(&s, sx, sy, 0);
 	if (pd->s.hyperlinks != NULL) {
 		hyperlinks_free(s.hyperlinks);
 		s.hyperlinks = hyperlinks_copy(pd->s.hyperlinks);
@@ -308,14 +535,34 @@ popup_draw_cb(struct client *c, void *data, struct screen_redraw_ctx *rctx)
 	screen_write_clearscreen(&ctx, 8);
 
 	if (pd->border_lines == BOX_LINES_NONE) {
+		u_int copy_sx = sx, copy_sy = sy;
+		if (copy_sx > pd->sx) copy_sx = pd->sx;
+		if (copy_sy > pd->sy) copy_sy = pd->sy;
 		screen_write_cursormove(&ctx, 0, 0, 0);
-		screen_write_fast_copy(&ctx, &pd->s, 0, 0, pd->sx, pd->sy);
-	} else if (pd->sx > 2 && pd->sy > 2) {
-		screen_write_box(&ctx, pd->sx, pd->sy, pd->border_lines,
-		    &pd->border_cell, pd->title);
-		screen_write_cursormove(&ctx, 1, 1, 0);
-		screen_write_fast_copy(&ctx, &pd->s, 0, 0, pd->sx - 2,
-		    pd->sy - 2);
+		screen_write_fast_copy(&ctx, &pd->s, 0, 0, copy_sx, copy_sy);
+	} else if (sx > 2 && sy > 2) {
+		u_int copy_sx = sx - 2, copy_sy = sy - 2;
+		u_int content_sx = (pd->sx > 2) ? pd->sx - 2 : 0;
+		u_int content_sy = (pd->sy > 2) ? pd->sy - 2 : 0;
+		if (copy_sx > content_sx) copy_sx = content_sx;
+		if (copy_sy > content_sy) copy_sy = content_sy;
+		screen_write_box(&ctx, sx, sy, pd->border_lines,
+		    &pd->border_cell, pd->anim_active ? NULL : pd->title);
+		if (copy_sx > 0 && copy_sy > 0) {
+			screen_write_cursormove(&ctx, 1, 1, 0);
+			screen_write_fast_copy(&ctx, &pd->s, 0, 0,
+			    copy_sx, copy_sy);
+		}
+	} else {
+		struct grid_cell	bgcell;
+		memcpy(&bgcell, &pd->border_cell, sizeof bgcell);
+		screen_write_cursormove(&ctx, 0, 0, 0);
+		for (i = 0; i < sy; i++) {
+			u_int j;
+			screen_write_cursormove(&ctx, 0, i, 0);
+			for (j = 0; j < sx; j++)
+				screen_write_cell(&ctx, &bgcell);
+		}
 	}
 	screen_write_stop(&ctx);
 
@@ -332,8 +579,8 @@ popup_draw_cb(struct client *c, void *data, struct screen_redraw_ctx *rctx)
 		c->overlay_check = NULL;
 		c->overlay_data = NULL;
 	}
-	for (i = 0; i < pd->sy; i++) {
-		tty_draw_line(tty, &s, 0, i, pd->sx, px, py + i, &defaults,
+	for (i = 0; i < sy; i++) {
+		tty_draw_line(tty, &s, 0, i, sx, px, py + i, &defaults,
 		    palette);
 	}
 	screen_free(&s);
@@ -376,6 +623,12 @@ popup_resize_cb(__unused struct client *c, void *data)
 
 	if (pd == NULL)
 		return;
+	if (pd->anim_active) {
+		if (pd->anim_timer_set && event_initialized(&pd->anim_timer))
+			evtimer_del(&pd->anim_timer);
+		pd->anim_active = 0;
+		pd->anim_closing = 0;
+	}
 	if (pd->md != NULL)
 		menu_free_cb(c, pd->md);
 
@@ -571,9 +824,10 @@ popup_key_cb(struct client *c, void *data, struct key_event *event)
 		if (menu_key_cb(c, pd->md, event) == 1) {
 			pd->md = NULL;
 			pd->menu = NULL;
-			if (pd->close)
-				server_client_clear_overlay(c);
-			else
+			if (pd->close) {
+				popup_anim_start_close(pd);
+				return (0);
+			} else
 				server_redraw_client(c);
 		}
 		return (0);
@@ -621,11 +875,15 @@ popup_key_cb(struct client *c, void *data, struct key_event *event)
 	}
 	if ((((pd->flags & (POPUP_CLOSEEXIT|POPUP_CLOSEEXITZERO)) == 0) ||
 	    pd->job == NULL) &&
-	    (event->key == '\033' || event->key == ('c'|KEYC_CTRL)))
-		return (1);
+	    (event->key == '\033' || event->key == ('c'|KEYC_CTRL))) {
+		popup_anim_start_close(pd);
+		return (0);
+	}
 	if (pd->job == NULL && (pd->flags & POPUP_CLOSEANYKEY) &&
-	    !KEYC_IS_MOUSE(event->key) && !KEYC_IS_PASTE(event->key))
-		return (1);
+	    !KEYC_IS_MOUSE(event->key) && !KEYC_IS_PASTE(event->key)) {
+		popup_anim_start_close(pd);
+		return (0);
+	}
 	if (pd->job != NULL) {
 		if (KEYC_IS_MOUSE(event->key)) {
 			/* Must be inside, checked already. */
@@ -711,7 +969,7 @@ popup_job_complete_cb(struct job *job)
 
 	if ((pd->flags & POPUP_CLOSEEXIT) ||
 	    ((pd->flags & POPUP_CLOSEEXITZERO) && pd->status == 0))
-		server_client_clear_overlay(pd->c);
+		popup_anim_start_close(pd);
 }
 
 int
@@ -874,6 +1132,7 @@ popup_display(int flags, enum box_lines lines, struct cmdq_item *item, u_int px,
 
 	server_client_set_overlay(c, 0, popup_check_cb, popup_mode_cb,
 	    popup_draw_cb, popup_key_cb, popup_free_cb, popup_resize_cb, pd);
+	popup_anim_start_open(pd);
 	return (0);
 }
 
