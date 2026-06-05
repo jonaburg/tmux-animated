@@ -96,7 +96,7 @@ rm -f Makefile.am.bak
 
 
 say "Bootstrapping"
-./autogen.sh >/dev/null 2>&1
+./autogen.sh >/dev/null
 
 say "Configuring (prefix=$PREFIX)"
 EXTRA_CONFIGURE=""
@@ -115,4 +115,4 @@ else
     sudo make install >/dev/null
 fi
 
-say "Done. Run: $BIN_NAME"
+say "Done. Run: $BIN_NAME ($PREFIX/bin/$BIN_NAME)"
