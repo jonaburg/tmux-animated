@@ -4,19 +4,14 @@ on:
   schedule:
     - cron: '30 6 * * *'
   workflow_dispatch:
-  pull_request:
-    types: [closed]
-    branches: [animations]
 
 permissions:
   contents: write
-  pull-requests: write
   issues: write
 
 jobs:
-  # ─── 1. Open a sync PR for any upstream tag we haven't mirrored ──────────
-  open-release-pr:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  # Mirror the newest unmirrored upstream release into animations.
+  mirror-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout animations (full history + tags)
@@ -64,19 +59,27 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-      - name: Create sync branch and merge upstream tag
+      - name: Merge upstream tag into animations
         if: steps.pick.outputs.tag != ''
         id: merge
         run: |
           TAG="${{ steps.pick.outputs.tag }}"
-          BRANCH="bot/release-sync-${TAG}"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          git checkout -b "$BRANCH"
           if ! git merge --no-edit --no-ff "upstream-${TAG}" \
                 -m "Merge upstream tmux ${TAG} into animations"; then
-            # Capture the conflict before aborting so the issue can show
-            # which files drifted.
-            FILES=$(git diff --name-only --diff-filter=U | head -50)
+            # Known boilerplate: take upstream's version string in
+            # configure.ac so version-bump-only releases sync without
+            # human intervention.
+            if git diff --name-only --diff-filter=U | grep -qx configure.ac; then
+              git checkout --theirs configure.ac
+              git add configure.ac
+            fi
+            REMAINING=$(git diff --name-only --diff-filter=U)
+            if [ -z "$REMAINING" ]; then
+              git commit --no-edit
+              echo "conflict=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            FILES=$(printf '%s' "$REMAINING" | head -50)
             STATUS=$(git status --short | head -50)
             {
               echo "files<<__EOF__"
@@ -111,23 +114,21 @@ jobs:
           make -j"$(nproc)"
           ./tmux -V
 
-      - name: Push branch and open PR
+      - name: Push to animations and tag release
         if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'false'
         env:
-          BRANCH: ${{ steps.merge.outputs.branch }}
-          TAG:    ${{ steps.pick.outputs.tag }}
+          TAG: ${{ steps.pick.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git push --force-with-lease origin "$BRANCH"
-          # PR title carries the version so the merge handler can recover it.
-          printf 'Mirrors upstream tmux release `%s` into animations.\n\nWhen merged, the post-merge job will tag the merge commit as `v%s-animated`.\n' "$TAG" "$TAG" > /tmp/pr-body.md
-          gh pr create \
-            --base animations \
-            --head "$BRANCH" \
-            --title "Release sync: tmux ${TAG}" \
-            --label release-sync \
-            --body-file /tmp/pr-body.md \
-            || echo "PR may already exist; continuing."
+          REL="v${TAG}-animated"
+          if git rev-parse -q --verify "refs/tags/${REL}" >/dev/null; then
+            echo "Tag ${REL} already exists; nothing to push."
+            exit 0
+          fi
+          # Fast-forward animations to the just-merged HEAD, then tag.
+          git push origin "HEAD:refs/heads/animations"
+          git tag -a "${REL}" -m "tmux-animated for tmux ${TAG}"
+          git push origin "${REL}"
 
       - name: Ensure issue labels exist
         if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'true'
@@ -137,9 +138,6 @@ jobs:
           gh label create upstream-drift --force \
             --color cc7700 \
             --description "Upstream sync needs manual attention" || true
-          gh label create release-sync --force \
-            --color 0e8a16 \
-            --description "Automated release-sync PR" || true
 
       - name: Open issue on merge conflict
         if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'true'
@@ -161,45 +159,3 @@ jobs:
             -f "title=Release sync conflict: tmux ${TAG}" \
             -f "body=$(cat /tmp/issue-body.md)" \
             -f "labels[]=upstream-drift"
-
-  # ─── 2. When a release-sync PR is merged, tag the merge commit ──────────
-  tag-on-merge:
-    if: >
-      github.event_name == 'pull_request'
-      && github.event.pull_request.merged == true
-      && contains(github.event.pull_request.labels.*.name, 'release-sync')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: animations
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract version from PR title
-        id: ver
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          # Expect "Release sync: tmux <version>"
-          VER=$(echo "$TITLE" | sed -nE 's/^Release sync: tmux ([0-9]+\.[0-9]+[a-z]?).*/\1/p')
-          if [ -z "$VER" ]; then
-            echo "Could not parse version from PR title: $TITLE" >&2
-            exit 1
-          fi
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
-
-      - name: Create and push tag
-        env:
-          SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          VER: ${{ steps.ver.outputs.version }}
-        run: |
-          git config user.name  'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          TAG="v${VER}-animated"
-          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-            echo "Tag ${TAG} already exists; nothing to do."
-            exit 0
-          fi
-          git tag -a "${TAG}" "${SHA}" -m "tmux-animated for tmux ${VER}"
-          git push origin "${TAG}"
