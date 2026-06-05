@@ -1,6 +1,6 @@
 # configure.ac
 
-AC_INIT([tmux], next-3.7)
+AC_INIT([tmux], 3.6b)
 AC_PREREQ([2.60])
 
 AC_CONFIG_AUX_DIR(etc)
@@ -63,24 +63,6 @@ AC_ARG_ENABLE(
 	[case "x$VERSION" in xnext*) enable_debug=yes;; esac]
 )
 AM_CONDITIONAL(IS_DEBUG, test "x$enable_debug" = xyes)
-
-# Is this --enable-optimizations?
-AC_ARG_ENABLE(
-	optimizations,
-	AS_HELP_STRING(--enable-optimizations, enable optimization build flags),
-	,
-	enable_optimizations=yes
-)
-AM_CONDITIONAL(IS_OPTIMIZED, test "x$enable_optimizations" = xyes)
-
-# Is this --enable-asan?
-AC_ARG_ENABLE(
-	asan,
-	AS_HELP_STRING(--enable-asan, enable ASAN build flags),
-	,
-	enable_asan=no
-)
-AM_CONDITIONAL(IS_ASAN, test "x$enable_asan" = xyes)
 
 # Is this a static build?
 AC_ARG_ENABLE(
