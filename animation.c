@@ -936,24 +936,42 @@ animation_commit_pane_layout(struct client *c, struct window *w)
 	a->sx = c->tty.sx;
 	a->sy = c->tty.sy;
 
-	y0 = a->sy;
-	y1 = 0;
-	for (i = 0; i < cap->n; i++) {
-		pa = &cap->panes[i];
-		if (pa->src_y < y0) y0 = pa->src_y;
-		if (pa->src_y + pa->src_h > y1) y1 = pa->src_y + pa->src_h;
-		if (pa->tgt_y < y0) y0 = pa->tgt_y;
-		if (pa->tgt_y + pa->tgt_h > y1) y1 = pa->tgt_y + pa->tgt_h;
+	{
+		int	x0 = a->sx, x1 = 0;
+
+		y0 = a->sy;
+		y1 = 0;
+		for (i = 0; i < cap->n; i++) {
+			pa = &cap->panes[i];
+			if (pa->phase == PANE_RESIZE &&
+			    pa->src_x == pa->tgt_x &&
+			    pa->src_y == pa->tgt_y &&
+			    pa->src_w == pa->tgt_w &&
+			    pa->src_h == pa->tgt_h)
+				continue;
+			if (pa->src_y < y0) y0 = pa->src_y;
+			if (pa->src_y + pa->src_h > y1)
+				y1 = pa->src_y + pa->src_h;
+			if (pa->tgt_y < y0) y0 = pa->tgt_y;
+			if (pa->tgt_y + pa->tgt_h > y1)
+				y1 = pa->tgt_y + pa->tgt_h;
+			if (pa->src_x < x0) x0 = pa->src_x;
+			if (pa->src_x + pa->src_w > x1)
+				x1 = pa->src_x + pa->src_w;
+			if (pa->tgt_x < x0) x0 = pa->tgt_x;
+			if (pa->tgt_x + pa->tgt_w > x1)
+				x1 = pa->tgt_x + pa->tgt_w;
+		}
+		if (y1 <= y0 || x1 <= x0) {
+			free(a);
+			animation_free_capture(c);
+			return;
+		}
+		a->pane_y0 = (u_int)y0;
+		a->pane_h = (u_int)(y1 - y0);
+		a->pane_x0 = (u_int)x0;
+		a->pane_w = (u_int)(x1 - x0);
 	}
-	if (y1 <= y0) {
-		free(a);
-		animation_free_capture(c);
-		return;
-	}
-	a->pane_y0 = (u_int)y0;
-	a->pane_h = (u_int)(y1 - y0);
-	a->pane_x0 = 0;
-	a->pane_w = a->sx;
 
 	a->pl_window = w;
 	a->pl_panes = cap->panes;
@@ -1023,6 +1041,72 @@ animation_paint_pane_clipped(struct client *c, struct screen *s,
 }
 
 static void
+animation_paint_border_cell(struct client *c, struct window *w,
+    enum pane_lines pane_lines, struct grid_cell *style, int cell_type,
+    int x, int y)
+{
+	struct grid_cell	gc, defaults;
+
+	if (x < 0 || y < 0 || x >= (int)c->tty.sx || y >= (int)c->tty.sy)
+		return;
+
+	memcpy(&gc, style, sizeof gc);
+	screen_redraw_border_set(w, NULL, pane_lines, cell_type, &gc);
+	memcpy(&defaults, &grid_default_cell, sizeof defaults);
+
+	tty_attributes(&c->tty, &gc, &defaults, NULL, NULL);
+	tty_cursor(&c->tty, (u_int)x, (u_int)y);
+	tty_cell(&c->tty, &gc, &defaults, NULL, NULL);
+}
+
+static void
+animation_paint_pane_border(struct client *c, struct window *w, int active,
+    int lx, int ly, int lw, int lh)
+{
+	struct grid_cell	 style;
+	struct format_tree	*ft;
+	enum pane_lines	 pane_lines;
+	int		 top = ly - 1, bot = ly + lh;
+	int		 left = lx - 1, right = lx + lw;
+	int		 px, py;
+
+	if (lw <= 0 || lh <= 0)
+		return;
+	if (c->session == NULL || c->session->curw == NULL)
+		return;
+
+	pane_lines = options_get_number(w->options, "pane-border-lines");
+
+	memcpy(&style, &grid_default_cell, sizeof style);
+	ft = format_create_defaults(NULL, c, c->session, c->session->curw,
+	    NULL);
+	style_add(&style, w->options,
+	    active ? "pane-active-border-style" : "pane-border-style", ft);
+	format_free(ft);
+
+	for (px = lx; px < lx + lw; px++) {
+		animation_paint_border_cell(c, w, pane_lines, &style,
+		    CELL_LEFTRIGHT, px, top);
+		animation_paint_border_cell(c, w, pane_lines, &style,
+		    CELL_LEFTRIGHT, px, bot);
+	}
+	for (py = ly; py < ly + lh; py++) {
+		animation_paint_border_cell(c, w, pane_lines, &style,
+		    CELL_TOPBOTTOM, left, py);
+		animation_paint_border_cell(c, w, pane_lines, &style,
+		    CELL_TOPBOTTOM, right, py);
+	}
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_TOPLEFT,
+	    left, top);
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_TOPRIGHT,
+	    right, top);
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_BOTTOMLEFT,
+	    left, bot);
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_BOTTOMRIGHT,
+	    right, bot);
+}
+
+static void
 animation_pane_draw(struct client *c, struct animation *a, double t)
 {
 	struct pane_anim	*pa;
@@ -1084,6 +1168,12 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 					continue;
 				if (pass == 1 && pa->pane_id != active_id)
 					continue;
+				if (pa->phase == PANE_RESIZE &&
+				    pa->src_x == pa->tgt_x &&
+				    pa->src_y == pa->tgt_y &&
+				    pa->src_w == pa->tgt_w &&
+				    pa->src_h == pa->tgt_h)
+					continue;
 
 				lx = (int)lround(pa->src_x +
 				    t * (pa->tgt_x - pa->src_x));
@@ -1093,6 +1183,10 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 				    t * (pa->tgt_w - pa->src_w));
 				lh = (int)lround(pa->src_h +
 				    t * (pa->tgt_h - pa->src_h));
+
+				animation_paint_pane_border(c, a->pl_window,
+				    pa->pane_id == active_id,
+				    lx, ly, lw, lh);
 
 				if (pa->phase == PANE_DYING) {
 					animation_paint_pane_clipped(c,

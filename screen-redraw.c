@@ -51,7 +51,7 @@ enum screen_redraw_border_type {
 #define BORDER_MARKERS "  +,.-"
 
 /* Get cell border character. */
-static void
+void
 screen_redraw_border_set(struct window *w, struct window_pane *wp,
     enum pane_lines pane_lines, int cell_type, struct grid_cell *gc)
 {
