@@ -117,6 +117,18 @@ jobs:
             --body-file /tmp/pr-body.md \
             || echo "PR may already exist; continuing."
 
+      - name: Ensure issue labels exist
+        if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create upstream-drift --force \
+            --color cc7700 \
+            --description "Upstream sync needs manual attention" || true
+          gh label create release-sync --force \
+            --color 0e8a16 \
+            --description "Automated release-sync PR" || true
+
       - name: Open issue on merge conflict
         if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'true'
         env:

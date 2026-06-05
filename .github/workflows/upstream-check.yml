@@ -19,6 +19,15 @@ jobs:
   apply-and-build:
     runs-on: ubuntu-latest
     steps:
+      - name: Ensure issue labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create upstream-drift --force \
+            --color cc7700 \
+            --description "Upstream sync needs manual attention" \
+            -R ${{ github.repository }} || true
+
       - name: Checkout tmux-animated
         uses: actions/checkout@v4
         with:
