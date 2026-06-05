@@ -88,10 +88,13 @@ say "Applying patch"
 patch -p1 -s < "$WORKDIR/$PATCH_NAME"
 
 
+# Automake canonicalizes program names — hyphens are illegal in variable
+# names, so the *_SOURCES / *_LDADD vars must use underscores even though
+# the bin_PROGRAMS entry can have a hyphen.
+CANON_NAME="${BIN_NAME//-/_}"
 sed -i.bak 's/^bin_PROGRAMS = tmux$/bin_PROGRAMS = '"$BIN_NAME"'/' Makefile.am
-sed -i.bak 's/^tmux_SOURCES/'"$BIN_NAME"'_SOURCES/g' Makefile.am
-sed -i.bak 's/^tmux_LDADD/'"$BIN_NAME"'_LDADD/g' Makefile.am
-sed -i.bak 's/^dist_tmux_SOURCES/dist_'"$BIN_NAME"'_SOURCES/g' Makefile.am
+sed -i.bak 's/tmux_SOURCES/'"$CANON_NAME"'_SOURCES/g' Makefile.am
+sed -i.bak 's/tmux_LDADD/'"$CANON_NAME"'_LDADD/g' Makefile.am
 rm -f Makefile.am.bak
 
 
