@@ -1204,19 +1204,7 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 						s_use = wp_live->screen;
 						pal_use = &wp_live->palette;
 					}
-					/*
-					 * If the lerped box exceeds the live
-					 * screen (the pane shrank, so live is
-					 * already at tgt dims), fall back to
-					 * the pre-change snapshot so the
-					 * shrinking box renders content at
-					 * its src-sized extent instead of
-					 * being clamped to tgt.
-					 */
-					if (pa->snapshot != NULL &&
-					    (s_use == NULL ||
-					    lw > (int)screen_size_x(s_use) ||
-					    lh > (int)screen_size_y(s_use))) {
+					if (s_use == NULL && pa->snapshot != NULL) {
 						s_use = pa->snapshot;
 						pal_use = &pa->snapshot_palette;
 					}
