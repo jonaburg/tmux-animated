@@ -135,12 +135,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.pick.outputs.tag }}
         run: |
-          printf 'Could not merge upstream tag `%s` into animations. Manual merge required.\n\nRun: %s/%s/actions/runs/%s\n' \
-            "$TAG" "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" > /tmp/issue-body.md
-          gh issue create \
-            --title "Release sync conflict: tmux ${TAG}" \
-            --label upstream-drift \
-            --body-file /tmp/issue-body.md
+          BODY=$(printf 'Could not merge upstream tag `%s` into animations. Manual merge required.\n\nRun: %s/%s/actions/runs/%s\n' \
+            "$TAG" "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}")
+          gh api -X POST "/repos/${{ github.repository }}/issues" \
+            -f "title=Release sync conflict: tmux ${TAG}" \
+            -f "body=${BODY}" \
+            -f "labels[]=upstream-drift"
 
   # ─── 2. When a release-sync PR is merged, tag the merge commit ──────────
   tag-on-merge:
