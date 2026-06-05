@@ -1184,9 +1184,13 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 				lh = (int)lround(pa->src_h +
 				    t * (pa->tgt_h - pa->src_h));
 
-				animation_paint_pane_border(c, a->pl_window,
-				    pa->pane_id == active_id,
-				    lx, ly, lw, lh);
+				if (c->session != NULL &&
+				    options_get_number(c->session->options,
+				    "animation-pane-borders"))
+					animation_paint_pane_border(c,
+					    a->pl_window,
+					    pa->pane_id == active_id,
+					    lx, ly, lw, lh);
 
 				if (pa->phase == PANE_DYING) {
 					animation_paint_pane_clipped(c,

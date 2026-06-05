@@ -69,7 +69,9 @@ These session options control behaviour:
 |---|---|---|
 | `animation-enable` | `on` | Master switch. Off disables all animations. |
 | `animation-window-switch` | `slide` | `slide` or `off`. |
-| `animation-pane-layout` | `on` | Animate split / resize / close. |
+| `animation-pane-layout` | `on` | Animate split / close. |
+| `animation-pane-borders` | `on` | Draw pane borders during pane layout animations. |
+| `animation-alt-screen` | `on` | Animate programs entering / leaving the alternate screen (vim, htop, less, ...). |
 | `animation-duration` | `120` | Window slide duration (ms). |
 | `animation-pane-duration` | `80` | Pane animation duration (ms). |
 | `animation-easing` | `smoothdamp` | `smoothdamp`, `linear`, or `ease-in-out`. |

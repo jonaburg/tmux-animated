@@ -347,6 +347,13 @@ const struct options_table_entry options_table[] = {
 	  .text = "Animate pane resize, split, and kill."
 	},
 
+	{ .name = "animation-pane-borders",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 1,
+	  .text = "Draw pane borders during pane layout animations."
+	},
+
 	{ .name = "animation-alt-screen",
 	  .type = OPTIONS_TABLE_FLAG,
 	  .scope = OPTIONS_TABLE_SESSION,
