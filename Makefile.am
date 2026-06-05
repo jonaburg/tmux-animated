@@ -85,6 +85,9 @@ endif
 dist_tmux_SOURCES = \
 	alerts.c \
 	animation.c \
+	animation-window.c \
+	animation-pane.c \
+	animation-scroll.c \
 	arguments.c \
 	attributes.c \
 	cfg.c \
