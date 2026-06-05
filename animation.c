@@ -795,15 +795,15 @@ animation_begin_pane_layout(struct client *c, struct window *w,
 		pa->src_y = wp->yoff;
 		pa->src_w = wp->sx;
 		pa->src_h = wp->sy;
+		if (wp->screen != NULL) {
+			pa->snapshot = xcalloc(1, sizeof *pa->snapshot);
+			animation_clone_screen(pa->snapshot, wp->screen);
+			memcpy(&pa->snapshot_palette, &wp->palette,
+			    sizeof pa->snapshot_palette);
+		}
 	}
 	cap->n = i;
-
-	if (dying_wp != NULL && dying_wp->screen != NULL) {
-		cap->dying_snapshot = xcalloc(1, sizeof *cap->dying_snapshot);
-		animation_clone_screen(cap->dying_snapshot, dying_wp->screen);
-		memcpy(&cap->dying_palette, &dying_wp->palette,
-		    sizeof cap->dying_palette);
-	}
+	(void)dying_wp;
 
 	c->animation_capture = cap;
 }
@@ -862,13 +862,6 @@ animation_commit_pane_layout(struct client *c, struct window *w)
 			pa->tgt_y = pa->src_y + pa->src_h / 2;
 			pa->tgt_w = 0;
 			pa->tgt_h = 0;
-			if (pa->pane_id == cap->dying_id) {
-				pa->snapshot = cap->dying_snapshot;
-				memcpy(&pa->snapshot_palette,
-				    &cap->dying_palette,
-				    sizeof pa->snapshot_palette);
-				cap->dying_snapshot = NULL;
-			}
 		}
 		if (pa->src_x != pa->tgt_x || pa->src_y != pa->tgt_y ||
 		    pa->src_w != pa->tgt_w || pa->src_h != pa->tgt_h)
@@ -1059,17 +1052,40 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 
 				if (pa->phase == PANE_DYING) {
 					animation_paint_pane_clipped(c,
-					    pa->snapshot, NULL, lx, ly, lw, lh);
+					    pa->snapshot,
+					    &pa->snapshot_palette,
+					    lx, ly, lw, lh);
 				} else {
+					struct screen	*s_use = NULL;
+					struct colour_palette *pal_use = NULL;
+
 					wp_live = animation_find_pane(
 					    a->pl_window, pa->pane_id);
-					if (wp_live == NULL ||
-					    wp_live->screen == NULL)
+					if (wp_live != NULL &&
+					    wp_live->screen != NULL) {
+						s_use = wp_live->screen;
+						pal_use = &wp_live->palette;
+					}
+					/*
+					 * If the lerped box exceeds the live
+					 * screen (the pane shrank, so live is
+					 * already at tgt dims), fall back to
+					 * the pre-change snapshot so the
+					 * shrinking box renders content at
+					 * its src-sized extent instead of
+					 * being clamped to tgt.
+					 */
+					if (pa->snapshot != NULL &&
+					    (s_use == NULL ||
+					    lw > (int)screen_size_x(s_use) ||
+					    lh > (int)screen_size_y(s_use))) {
+						s_use = pa->snapshot;
+						pal_use = &pa->snapshot_palette;
+					}
+					if (s_use == NULL)
 						continue;
 					animation_paint_pane_clipped(c,
-					    wp_live->screen,
-					    &wp_live->palette,
-					    lx, ly, lw, lh);
+					    s_use, pal_use, lx, ly, lw, lh);
 				}
 			}
 		}
