@@ -2242,16 +2242,10 @@ window_copy_cmd_scroll_down(struct window_copy_cmd_state *cs)
 {
 	struct window_mode_entry	*wme = cs->wme;
 	struct window_copy_mode_data	*data = wme->data;
-	struct window_pane		*wp = wme->wp;
 	u_int				 np = wme->prefix;
-	int				 old_oy = (int)data->oy;
 
 	for (; np != 0; np--)
 		window_copy_cursor_down(wme, 1);
-	if (cs->c != NULL && (int)data->oy != old_oy) {
-		animation_begin_scroll(cs->c, wp, data->backing, old_oy,
-		    (int)data->oy);
-	}
 	if (data->scroll_exit && data->oy == 0)
 		return (WINDOW_COPY_CMD_CANCEL);
 	return (WINDOW_COPY_CMD_NOTHING);
@@ -2262,16 +2256,10 @@ window_copy_cmd_scroll_down_and_cancel(struct window_copy_cmd_state *cs)
 {
 	struct window_mode_entry	*wme = cs->wme;
 	struct window_copy_mode_data	*data = wme->data;
-	struct window_pane		*wp = wme->wp;
 	u_int				 np = wme->prefix;
-	int				 old_oy = (int)data->oy;
 
 	for (; np != 0; np--)
 		window_copy_cursor_down(wme, 1);
-	if (cs->c != NULL && (int)data->oy != old_oy && data->oy != 0) {
-		animation_begin_scroll(cs->c, wp, data->backing, old_oy,
-		    (int)data->oy);
-	}
 	if (data->oy == 0)
 		return (WINDOW_COPY_CMD_CANCEL);
 	return (WINDOW_COPY_CMD_NOTHING);
@@ -2281,17 +2269,10 @@ static enum window_copy_cmd_action
 window_copy_cmd_scroll_up(struct window_copy_cmd_state *cs)
 {
 	struct window_mode_entry	*wme = cs->wme;
-	struct window_copy_mode_data	*data = wme->data;
-	struct window_pane		*wp = wme->wp;
 	u_int				 np = wme->prefix;
-	int				 old_oy = (int)data->oy;
 
 	for (; np != 0; np--)
 		window_copy_cursor_up(wme, 1);
-	if (cs->c != NULL && (int)data->oy != old_oy) {
-		animation_begin_scroll(cs->c, wp, data->backing, old_oy,
-		    (int)data->oy);
-	}
 	return (WINDOW_COPY_CMD_NOTHING);
 }
 
