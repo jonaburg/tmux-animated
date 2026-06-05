@@ -28,9 +28,48 @@ say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 
-for cmd in cc make patch git curl pkg-config autoconf automake; do
-    command -v "$cmd" >/dev/null 2>&1 || err "missing required tool: $cmd"
+missing=()
+for cmd in cc make patch git curl pkg-config autoconf automake bison; do
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
 done
+
+# libevent and ncurses are libraries, not commands; check via pkg-config if available.
+if command -v pkg-config >/dev/null 2>&1; then
+    pkg-config --exists libevent 2>/dev/null || missing+=("libevent (dev headers)")
+    pkg-config --exists ncurses 2>/dev/null || missing+=("ncurses (dev headers)")
+fi
+
+if [ "${#missing[@]}" -gt 0 ]; then
+    printf '\033[1;31merror:\033[0m missing required tools/libraries: %s\n' "${missing[*]}" >&2
+    echo >&2
+    echo "Install hints:" >&2
+    case "$(uname -s)" in
+        Linux)
+            if [ -r /etc/os-release ]; then . /etc/os-release; fi
+            case "${ID:-}${ID_LIKE:-}" in
+                *debian*|*ubuntu*)
+                    echo "  sudo apt-get install -y build-essential pkg-config autoconf automake libevent-dev libncurses-dev bison patch git curl" >&2
+                    ;;
+                *fedora*|*rhel*|*centos*)
+                    echo "  sudo dnf install -y gcc make patch git curl pkgconf-pkg-config autoconf automake libevent-devel ncurses-devel bison" >&2
+                    ;;
+                *arch*)
+                    echo "  sudo pacman -S --needed base-devel pkgconf autoconf automake libevent ncurses bison patch git curl" >&2
+                    ;;
+                *alpine*)
+                    echo "  sudo apk add build-base pkgconf autoconf automake libevent-dev ncurses-dev bison patch git curl" >&2
+                    ;;
+                *)
+                    echo "  Install: build tools, pkg-config, autoconf, automake, libevent-dev, ncurses-dev, bison" >&2
+                    ;;
+            esac
+            ;;
+        Darwin)
+            echo "  brew install pkg-config autoconf automake libevent ncurses" >&2
+            ;;
+    esac
+    exit 1
+fi
 
 if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
     export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
