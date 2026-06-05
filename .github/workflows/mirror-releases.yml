@@ -66,12 +66,49 @@ jobs:
           TAG="${{ steps.pick.outputs.tag }}"
           if ! git merge --no-edit --no-ff "upstream-${TAG}" \
                 -m "Merge upstream tmux ${TAG} into animations"; then
-            # Known boilerplate: take upstream's version string in
-            # configure.ac so version-bump-only releases sync without
-            # human intervention.
+            # configure.ac's AC_INIT version string is the only line that
+            # conflicts on every release. Resolve only hunks where the
+            # sole difference is AC_INIT, taking upstream's value. Leave
+            # other hunks marked so they fall through to the issue path.
             if git diff --name-only --diff-filter=U | grep -qx configure.ac; then
-              git checkout --theirs configure.ac
-              git add configure.ac
+              UPSTREAM_AC_INIT=$(git show "upstream-${TAG}:configure.ac" \
+                | grep -E '^AC_INIT\(' | head -1)
+              if [ -n "$UPSTREAM_AC_INIT" ]; then
+                python3 - "$UPSTREAM_AC_INIT" <<'PY'
+import sys, pathlib
+upstream = sys.argv[1].rstrip('\n') + '\n'
+p = pathlib.Path('configure.ac')
+src = p.read_text().splitlines(keepends=True)
+out, i = [], 0
+while i < len(src):
+    line = src[i]
+    if not line.startswith('<<<<<<<'):
+        out.append(line); i += 1
+        continue
+    ours, theirs = [], []
+    i += 1
+    while i < len(src) and not src[i].startswith('======='):
+        ours.append(src[i]); i += 1
+    i += 1
+    while i < len(src) and not src[i].startswith('>>>>>>>'):
+        theirs.append(src[i]); i += 1
+    i += 1
+    ours_no = [l for l in ours if not l.startswith('AC_INIT(')]
+    theirs_no = [l for l in theirs if not l.startswith('AC_INIT(')]
+    if ours_no == theirs_no:
+        out.extend(upstream if l.startswith('AC_INIT(') else l for l in ours)
+    else:
+        out.append(line)
+        out.extend(ours)
+        out.append('=======\n')
+        out.extend(theirs)
+        out.append('>>>>>>> theirs\n')
+p.write_text(''.join(out))
+PY
+                if ! grep -qE '^(<<<<<<<|=======|>>>>>>>)' configure.ac; then
+                  git add configure.ac
+                fi
+              fi
             fi
             REMAINING=$(git diff --name-only --diff-filter=U)
             if [ -z "$REMAINING" ]; then
