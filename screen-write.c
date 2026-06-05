@@ -2916,12 +2916,30 @@ screen_write_alternateon(struct screen_write_ctx *ctx, struct grid_cell *gc,
 {
 	struct tty_ctx		 ttyctx;
 	struct window_pane	*wp = ctx->wp;
+	struct screen		*snap = NULL;
 
 	if (wp != NULL && !options_get_number(wp->options, "alternate-screen"))
 		return;
 
 	screen_write_collect_flush(ctx, 0, __func__);
+
+	if (wp != NULL && !SCREEN_IS_ALTERNATE(ctx->s)) {
+		struct screen_write_ctx	cctx;
+		u_int			sx = screen_size_x(ctx->s);
+		u_int			sy = screen_size_y(ctx->s);
+
+		snap = xcalloc(1, sizeof *snap);
+		screen_init(snap, sx, sy, 0);
+		screen_write_start(&cctx, snap);
+		screen_write_cursormove(&cctx, 0, 0, 0);
+		screen_write_fast_copy(&cctx, ctx->s, 0, 0, sx, sy);
+		screen_write_stop(&cctx);
+	}
+
 	screen_alternate_on(ctx->s, gc, cursor);
+
+	if (snap != NULL)
+		animation_alt_screen_enter(wp, snap);
 
 	if (wp != NULL) {
 		layout_fix_panes(wp->window, NULL);
@@ -2940,12 +2958,30 @@ screen_write_alternateoff(struct screen_write_ctx *ctx, struct grid_cell *gc,
 {
 	struct tty_ctx		 ttyctx;
 	struct window_pane	*wp = ctx->wp;
+	struct screen		*snap = NULL;
 
 	if (wp != NULL && !options_get_number(wp->options, "alternate-screen"))
 		return;
 
 	screen_write_collect_flush(ctx, 0, __func__);
+
+	if (wp != NULL && SCREEN_IS_ALTERNATE(ctx->s)) {
+		struct screen_write_ctx	cctx;
+		u_int			sx = screen_size_x(ctx->s);
+		u_int			sy = screen_size_y(ctx->s);
+
+		snap = xcalloc(1, sizeof *snap);
+		screen_init(snap, sx, sy, 0);
+		screen_write_start(&cctx, snap);
+		screen_write_cursormove(&cctx, 0, 0, 0);
+		screen_write_fast_copy(&cctx, ctx->s, 0, 0, sx, sy);
+		screen_write_stop(&cctx);
+	}
+
 	screen_alternate_off(ctx->s, gc, cursor);
+
+	if (snap != NULL)
+		animation_alt_screen_exit(wp, snap);
 
 	if (wp != NULL) {
 		layout_fix_panes(wp->window, NULL);

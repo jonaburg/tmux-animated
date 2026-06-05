@@ -347,6 +347,13 @@ const struct options_table_entry options_table[] = {
 	  .text = "Animate pane resize, split, and kill."
 	},
 
+	{ .name = "animation-alt-screen",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 1,
+	  .text = "Animate programs entering and leaving the alternate screen."
+	},
+
 	{ .name = "animation-pane-duration",
 	  .type = OPTIONS_TABLE_NUMBER,
 	  .scope = OPTIONS_TABLE_SESSION,

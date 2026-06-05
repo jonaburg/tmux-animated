@@ -34,6 +34,9 @@ struct pane_anim {
 
 	struct screen		*snapshot;	/* DYING only */
 	struct colour_palette	 snapshot_palette;
+
+	struct screen		*backdrop;
+	struct colour_palette	 backdrop_palette;
 };
 
 struct pane_layout_capture {
@@ -76,6 +79,8 @@ struct animation {
 	u_int			 sy;
 	u_int			 pane_y0;
 	u_int			 pane_h;
+	u_int			 pane_x0;
+	u_int			 pane_w;
 
 	int			 status_active;
 	int			 status_y0;
@@ -196,6 +201,8 @@ animation_begin_window_switch(struct client *c, struct winlink *src,
 		}
 		a->pane_y0 = y0;
 		a->pane_h = y1 - y0;
+		a->pane_x0 = 0;
+		a->pane_w = a->sx;
 	}
 
 	a->target_pos = 0;
@@ -277,18 +284,35 @@ animation_check_cb(struct client *c, void *data, u_int px, u_int py, u_int nx)
 {
 	struct animation	*a = data;
 	struct visible_ranges	*r = &a->vis;
+	u_int			 row_l = px, row_r = px + nx;
+	u_int			 cov_l, cov_r;
 
 	(void)c;
 
-	server_client_ensure_ranges(r, 1);
-	r->used = 1;
+	server_client_ensure_ranges(r, 2);
+	r->used = 0;
 
 	if (py < a->pane_y0 || py >= a->pane_y0 + a->pane_h) {
-		r->ranges[0].px = px;
-		r->ranges[0].nx = nx;
-	} else {
-		r->ranges[0].px = 0;
-		r->ranges[0].nx = 0;
+		r->ranges[r->used].px = px;
+		r->ranges[r->used].nx = nx;
+		r->used = 1;
+		return (r);
+	}
+
+	cov_l = a->pane_x0;
+	cov_r = a->pane_x0 + a->pane_w;
+
+	if (row_l < cov_l) {
+		u_int end = row_r < cov_l ? row_r : cov_l;
+		r->ranges[r->used].px = row_l;
+		r->ranges[r->used].nx = end - row_l;
+		r->used++;
+	}
+	if (row_r > cov_r) {
+		u_int start = row_l > cov_r ? row_l : cov_r;
+		r->ranges[r->used].px = start;
+		r->ranges[r->used].nx = row_r - start;
+		r->used++;
 	}
 	return (r);
 }
@@ -601,6 +625,10 @@ animation_free_cb(struct client *c, void *data)
 		if (a->pl_panes[i].snapshot != NULL) {
 			screen_free(a->pl_panes[i].snapshot);
 			free(a->pl_panes[i].snapshot);
+		}
+		if (a->pl_panes[i].backdrop != NULL) {
+			screen_free(a->pl_panes[i].backdrop);
+			free(a->pl_panes[i].backdrop);
 		}
 	}
 	free(a->pl_panes);
@@ -924,6 +952,8 @@ animation_commit_pane_layout(struct client *c, struct window *w)
 	}
 	a->pane_y0 = (u_int)y0;
 	a->pane_h = (u_int)(y1 - y0);
+	a->pane_x0 = 0;
+	a->pane_w = a->sx;
 
 	a->pl_window = w;
 	a->pl_panes = cap->panes;
@@ -1017,9 +1047,23 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 		    vy++) {
 			tty_attributes(&c->tty, &fill, &fill,
 			    wp ? &wp->palette : NULL, NULL);
-			tty_cursor(&c->tty, 0, (u_int)vy);
-			tty_repeat_space(&c->tty, a->sx);
+			tty_cursor(&c->tty, a->pane_x0, (u_int)vy);
+			tty_repeat_space(&c->tty, a->pane_w);
 		}
+	}
+
+	for (i = 0; i < a->pl_n; i++) {
+		struct window_pane	*wp_b;
+
+		pa = &a->pl_panes[i];
+		if (pa->backdrop == NULL)
+			continue;
+		wp_b = animation_find_pane(a->pl_window, pa->pane_id);
+		if (wp_b == NULL)
+			continue;
+		animation_paint_pane_clipped(c, pa->backdrop,
+		    &pa->backdrop_palette, (int)wp_b->xoff, (int)wp_b->yoff,
+		    (int)wp_b->sx, (int)wp_b->sy);
 	}
 
 	{
@@ -1125,6 +1169,155 @@ animation_window_pane_layout_commit(struct window *w)
 			continue;
 		animation_commit_pane_layout(c, w);
 	}
+}
+
+static void
+animation_begin_alt_screen_one(struct client *c, struct window_pane *wp,
+    struct screen *snap, int entering)
+{
+	struct animation	*a;
+	struct pane_anim	*pa;
+	struct timeval		 tv;
+
+	if (c == NULL || c->session == NULL || wp == NULL || snap == NULL)
+		goto drop;
+	if (!options_get_number(c->session->options, "animation-enable"))
+		goto drop;
+	if (!options_get_number(c->session->options, "animation-alt-screen"))
+		goto drop;
+	if (c->tty.sx == 0 || c->tty.sy == 0)
+		goto drop;
+	if (c->overlay_draw != NULL && c->animation == NULL)
+		goto drop;
+	if (c->animation != NULL)
+		goto drop;
+	if (wp->sx == 0 || wp->sy == 0)
+		goto drop;
+
+	a = xcalloc(1, sizeof *a);
+	a->client = c;
+	a->kind = ANIM_PANE_LAYOUT;
+	a->easing = animation_easing_lookup(c->session);
+	a->duration_ms = options_get_number(c->session->options,
+	    "animation-pane-duration");
+	a->frame_interval_ms = options_get_number(c->session->options,
+	    "animation-frame-interval");
+	a->sx = c->tty.sx;
+	a->sy = c->tty.sy;
+	a->pane_y0 = wp->yoff;
+	a->pane_h = wp->sy;
+	a->pane_x0 = wp->xoff;
+	a->pane_w = wp->sx;
+	a->pl_window = wp->window;
+	a->pl_n = 1;
+	a->pl_panes = xcalloc(1, sizeof *a->pl_panes);
+	pa = &a->pl_panes[0];
+	pa->pane_id = wp->id;
+
+	if (entering) {
+		pa->phase = PANE_BORN;
+		pa->src_x = wp->xoff + wp->sx / 2;
+		pa->src_y = wp->yoff + wp->sy / 2;
+		pa->src_w = 0;
+		pa->src_h = 0;
+		pa->tgt_x = wp->xoff;
+		pa->tgt_y = wp->yoff;
+		pa->tgt_w = wp->sx;
+		pa->tgt_h = wp->sy;
+		pa->backdrop = snap;
+		memcpy(&pa->backdrop_palette, &wp->palette,
+		    sizeof pa->backdrop_palette);
+	} else {
+		pa->phase = PANE_DYING;
+		pa->src_x = wp->xoff;
+		pa->src_y = wp->yoff;
+		pa->src_w = wp->sx;
+		pa->src_h = wp->sy;
+		pa->tgt_x = wp->xoff + wp->sx / 2;
+		pa->tgt_y = wp->yoff + wp->sy / 2;
+		pa->tgt_w = 0;
+		pa->tgt_h = 0;
+		pa->snapshot = snap;
+		memcpy(&pa->snapshot_palette, &wp->palette,
+		    sizeof pa->snapshot_palette);
+		if (wp->screen != NULL) {
+			pa->backdrop = xcalloc(1, sizeof *pa->backdrop);
+			animation_clone_screen(pa->backdrop, wp->screen);
+			memcpy(&pa->backdrop_palette, &wp->palette,
+			    sizeof pa->backdrop_palette);
+		}
+	}
+
+	a->start_ms = get_timer();
+	a->last_ms = a->start_ms;
+	c->animation = a;
+
+	server_client_set_overlay(c, 0, animation_check_cb, NULL,
+	    animation_draw_cb, animation_key_cb, animation_free_cb,
+	    animation_resize_cb, a);
+
+	evtimer_set(&c->animation_timer, animation_frame_cb, c);
+	tv.tv_sec = 0;
+	tv.tv_usec = (long)a->frame_interval_ms * 1000L;
+	evtimer_add(&c->animation_timer, &tv);
+	return;
+
+drop:
+	if (snap != NULL) {
+		screen_free(snap);
+		free(snap);
+	}
+}
+
+static void
+animation_alt_screen_broadcast(struct window_pane *wp, struct screen *snap,
+    int entering)
+{
+	struct client	*c;
+	int		 placed = 0;
+
+	if (wp == NULL || wp->window == NULL || snap == NULL) {
+		if (snap != NULL) {
+			screen_free(snap);
+			free(snap);
+		}
+		return;
+	}
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		struct screen	*per;
+
+		if (c->session == NULL || c->session->curw == NULL)
+			continue;
+		if (c->session->curw->window != wp->window)
+			continue;
+
+		if (!placed) {
+			per = snap;
+			placed = 1;
+		} else {
+			per = xcalloc(1, sizeof *per);
+			animation_clone_screen(per, snap);
+		}
+		animation_begin_alt_screen_one(c, wp, per, entering);
+	}
+
+	if (!placed) {
+		screen_free(snap);
+		free(snap);
+	}
+}
+
+void
+animation_alt_screen_enter(struct window_pane *wp, struct screen *snap)
+{
+	animation_alt_screen_broadcast(wp, snap, 1);
+}
+
+void
+animation_alt_screen_exit(struct window_pane *wp, struct screen *snap)
+{
+	animation_alt_screen_broadcast(wp, snap, 0);
 }
 
 /* Hook used from window_pane_destroy paths to snapshot a dying pane. */
