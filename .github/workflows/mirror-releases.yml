@@ -108,14 +108,13 @@ jobs:
         run: |
           git push --force-with-lease origin "$BRANCH"
           # PR title carries the version so the merge handler can recover it.
+          printf 'Mirrors upstream tmux release `%s` into animations.\n\nWhen merged, the post-merge job will tag the merge commit as `v%s-animated`.\n' "$TAG" "$TAG" > /tmp/pr-body.md
           gh pr create \
             --base animations \
             --head "$BRANCH" \
             --title "Release sync: tmux ${TAG}" \
             --label release-sync \
-            --body "Mirrors upstream tmux release \`${TAG}\` into animations.
-
-When merged, the post-merge job will tag the merge commit as \`v${TAG}-animated\`." \
+            --body-file /tmp/pr-body.md \
             || echo "PR may already exist; continuing."
 
       - name: Open issue on merge conflict
