@@ -72,6 +72,8 @@ These session options control behaviour:
 | `animation-pane-layout` | `on` | Animate split / close. |
 | `animation-pane-borders` | `on` | Draw pane borders during pane layout animations. |
 | `animation-alt-screen` | `on` | Animate programs entering / leaving the alternate screen (vim, htop, less, ...). |
+| `animation-scroll` | `on` | Smooth-scroll copy-mode PageUp/PageDown and mouse-wheel scrolling. |
+| `animation-scroll-duration` | `150` | Scroll animation duration (ms). |
 | `animation-duration` | `120` | Window slide duration (ms). |
 | `animation-pane-duration` | `80` | Pane animation duration (ms). |
 | `animation-easing` | `smoothdamp` | `smoothdamp`, `linear`, or `ease-in-out`. |

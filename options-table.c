@@ -354,6 +354,22 @@ const struct options_table_entry options_table[] = {
 	  .text = "Draw pane borders during pane layout animations."
 	},
 
+	{ .name = "animation-scroll",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 1,
+	  .text = "Smooth-scroll copy-mode page up and page down."
+	},
+
+	{ .name = "animation-scroll-duration",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .minimum = 0,
+	  .maximum = 5000,
+	  .default_num = 150,
+	  .text = "Duration in ms of copy-mode scroll animations."
+	},
+
 	{ .name = "animation-alt-screen",
 	  .type = OPTIONS_TABLE_FLAG,
 	  .scope = OPTIONS_TABLE_SESSION,

@@ -753,7 +753,10 @@ window_copy_pageup1(struct window_mode_entry *wme, int half_page)
 {
 	struct window_copy_mode_data	*data = wme->data;
 	struct screen			*s = &data->screen;
+	struct window_pane		*wp = wme->wp;
+	struct client			*c;
 	u_int				 n, ox, oy, px, py;
+	int				 old_oy = (int)data->oy;
 
 	oy = screen_hsize(data->backing) + data->cy - data->oy;
 	ox = window_copy_find_length(wme, oy);
@@ -793,6 +796,15 @@ window_copy_pageup1(struct window_mode_entry *wme, int half_page)
 		window_copy_search_marks(wme, NULL, data->searchregex, 1);
 	window_copy_update_selection(wme, 1, 0);
 	window_copy_redraw_screen(wme);
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		if (c->session == NULL || c->session->curw == NULL)
+			continue;
+		if (c->session->curw->window != wp->window)
+			continue;
+		animation_begin_scroll(c, wp, data->backing, old_oy,
+		    (int)data->oy);
+	}
 }
 
 void
@@ -811,7 +823,10 @@ window_copy_pagedown1(struct window_mode_entry *wme, int half_page,
 {
 	struct window_copy_mode_data	*data = wme->data;
 	struct screen			*s = &data->screen;
+	struct window_pane		*wp = wme->wp;
+	struct client			*c;
 	u_int				 n, ox, oy, px, py;
+	int				 old_oy = (int)data->oy;
 
 	oy = screen_hsize(data->backing) + data->cy - data->oy;
 	ox = window_copy_find_length(wme, oy);
@@ -853,6 +868,15 @@ window_copy_pagedown1(struct window_mode_entry *wme, int half_page,
 		window_copy_search_marks(wme, NULL, data->searchregex, 1);
 	window_copy_update_selection(wme, 1, 0);
 	window_copy_redraw_screen(wme);
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		if (c->session == NULL || c->session->curw == NULL)
+			continue;
+		if (c->session->curw->window != wp->window)
+			continue;
+		animation_begin_scroll(c, wp, data->backing, old_oy,
+		    (int)data->oy);
+	}
 	return (0);
 }
 
@@ -2218,10 +2242,16 @@ window_copy_cmd_scroll_down(struct window_copy_cmd_state *cs)
 {
 	struct window_mode_entry	*wme = cs->wme;
 	struct window_copy_mode_data	*data = wme->data;
+	struct window_pane		*wp = wme->wp;
 	u_int				 np = wme->prefix;
+	int				 old_oy = (int)data->oy;
 
 	for (; np != 0; np--)
 		window_copy_cursor_down(wme, 1);
+	if (cs->c != NULL && (int)data->oy != old_oy) {
+		animation_begin_scroll(cs->c, wp, data->backing, old_oy,
+		    (int)data->oy);
+	}
 	if (data->scroll_exit && data->oy == 0)
 		return (WINDOW_COPY_CMD_CANCEL);
 	return (WINDOW_COPY_CMD_NOTHING);
@@ -2232,10 +2262,16 @@ window_copy_cmd_scroll_down_and_cancel(struct window_copy_cmd_state *cs)
 {
 	struct window_mode_entry	*wme = cs->wme;
 	struct window_copy_mode_data	*data = wme->data;
+	struct window_pane		*wp = wme->wp;
 	u_int				 np = wme->prefix;
+	int				 old_oy = (int)data->oy;
 
 	for (; np != 0; np--)
 		window_copy_cursor_down(wme, 1);
+	if (cs->c != NULL && (int)data->oy != old_oy && data->oy != 0) {
+		animation_begin_scroll(cs->c, wp, data->backing, old_oy,
+		    (int)data->oy);
+	}
 	if (data->oy == 0)
 		return (WINDOW_COPY_CMD_CANCEL);
 	return (WINDOW_COPY_CMD_NOTHING);
@@ -2245,10 +2281,17 @@ static enum window_copy_cmd_action
 window_copy_cmd_scroll_up(struct window_copy_cmd_state *cs)
 {
 	struct window_mode_entry	*wme = cs->wme;
+	struct window_copy_mode_data	*data = wme->data;
+	struct window_pane		*wp = wme->wp;
 	u_int				 np = wme->prefix;
+	int				 old_oy = (int)data->oy;
 
 	for (; np != 0; np--)
 		window_copy_cursor_up(wme, 1);
+	if (cs->c != NULL && (int)data->oy != old_oy) {
+		animation_begin_scroll(cs->c, wp, data->backing, old_oy,
+		    (int)data->oy);
+	}
 	return (WINDOW_COPY_CMD_NOTHING);
 }
 
