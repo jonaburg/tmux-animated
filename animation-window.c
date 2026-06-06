@@ -119,20 +119,6 @@ animation_begin_window_switch(struct client *c, struct winlink *src,
 	a->src_idx = src->idx;
 	a->tgt_idx = tgt->idx;
 
-	/*
-	 * Snapshot only the source. The target stays the live winlink: it
-	 * remains alive (it's becoming the new current window), and tmux runs
-	 * recalculate_sizes() AFTER we return, which can change tgt panes'
-	 * yoff/sx/sy. Reading live keeps the painted geometry in sync with
-	 * the eventual normal redraw.
-	 *
-	 * Close path (shell exits, last pane destroyed): server_destroy_pane
-	 * snapshots the dying pane(s) into c->animation_capture BEFORE
-	 * removing them, then triggers server_kill_window which lands us
-	 * here. By this point src->window->panes is already empty, so
-	 * snapshotting from the live window would yield nothing. Transfer
-	 * the panes array out of the pane-layout capture instead.
-	 */
 	{
 		struct pane_layout_capture *cap = c->animation_capture;
 
@@ -198,11 +184,6 @@ animation_retarget(struct client *c, struct winlink *new_tgt)
 	a->src_idx = new_src->idx;
 	a->tgt_idx = new_tgt->idx;
 
-	/*
-	 * The previous tgt (new_src) is still alive (it's currently the
-	 * active window — that's why retarget was invoked). Snapshot it now
-	 * in case it gets freed during the next leg. Target stays live.
-	 */
 	animation_free_snapshot(&a->sw_src_panes, &a->sw_src_n);
 	animation_snapshot_window(new_src->window, &a->sw_src_panes,
 	    &a->sw_src_n, &a->sw_src_active);
@@ -266,12 +247,6 @@ animation_window_default_cell(struct pane_anim *panes, size_t n, int active,
 	return (pa);
 }
 
-/*
- * Live-window paint: reads wp->screen / xoff / yoff / sx / sy at draw time.
- * Used for the target side of a window switch, where the live winlink stays
- * alive and recalculate_sizes() may have updated its geometry after the
- * animation was set up.
- */
 static void
 animation_paint_window_live(struct client *c, struct window *w, int dx,
     u_int view_w, u_int view_y0, u_int view_h)
@@ -283,7 +258,6 @@ animation_paint_window_live(struct client *c, struct window *w, int dx,
 
 	if (w == NULL)
 		return;
-	memcpy(&defaults, &grid_default_cell, sizeof defaults);
 
 	TAILQ_FOREACH(wp, &w->panes, entry) {
 		if (wp->screen == NULL)
@@ -297,6 +271,7 @@ animation_paint_window_live(struct client *c, struct window *w, int dx,
 		if (nx <= 0)
 			continue;
 
+		tty_default_colours(&defaults, wp);
 		for (sy = 0; sy < wp->sy; sy++) {
 			vy = wp->yoff + sy;
 			if (vy < view_y0 || vy >= view_y0 + view_h)
@@ -352,9 +327,6 @@ animation_snapshot_window(struct window *w, struct pane_anim **out, size_t *n,
 			animation_clone_screen(pa->snapshot, wp->screen);
 			memcpy(&pa->snapshot_palette, &wp->palette,
 			    sizeof pa->snapshot_palette);
-			/* See note in animation_begin_pane_layout: palette
-			 * arrays may be freed mid-animation; rely on fg/bg
-			 * only. */
 			pa->snapshot_palette.palette = NULL;
 			pa->snapshot_palette.default_palette = NULL;
 		}
@@ -524,7 +496,6 @@ animation_window_draw(struct client *c, struct animation *a)
 	struct window_pane	*tgt_wp;
 	struct grid_cell	 src_cell, tgt_cell;
 	struct colour_palette	*src_pal, *tgt_pal;
-	int			 src_l, src_r, tgt_l, tgt_r;
 	u_int			 vy;
 
 	tgt_dx = (int)lround(a->pos);
@@ -541,21 +512,6 @@ animation_window_draw(struct client *c, struct animation *a)
 		tgt_wp = NULL;
 	tgt_pal = (tgt_wp != NULL) ? &tgt_wp->palette : NULL;
 
-	src_l = src_dx > 0 ? src_dx : 0;
-	src_r = src_dx + (int)a->sx;
-	if (src_r > (int)a->sx) src_r = (int)a->sx;
-	tgt_l = tgt_dx > 0 ? tgt_dx : 0;
-	tgt_r = tgt_dx + (int)a->sx;
-	if (tgt_r > (int)a->sx) tgt_r = (int)a->sx;
-
-	/*
-	 * Clear the entire pane area row-by-row before any content paints.
-	 * The previous two-side bg-fill scheme (fill src_l..src_r with src
-	 * bg, then tgt_l..tgt_r with tgt bg) wasn't reliably overwriting
-	 * cells the source had stamped on a prior frame, leaving a smear of
-	 * source content as the slide progressed. Forcing a full-row wipe
-	 * each frame guarantees the next paint starts from a clean row.
-	 */
 	{
 		const struct grid_cell	*fill_cell;
 		struct colour_palette	*fill_pal;
@@ -577,7 +533,6 @@ animation_window_draw(struct client *c, struct animation *a)
 			tty_repeat_space(&c->tty, a->sx);
 		}
 	}
-	(void)src_l; (void)src_r; (void)tgt_l; (void)tgt_r;
 
 	animation_paint_window(c, a->sw_src_panes, a->sw_src_n, src_dx, a->sx,
 	    a->pane_y0, a->pane_h);
@@ -599,5 +554,4 @@ void
 animation_window_free(struct animation *a)
 {
 	animation_free_snapshot(&a->sw_src_panes, &a->sw_src_n);
-	animation_free_snapshot(&a->sw_tgt_panes, &a->sw_tgt_n);
 }

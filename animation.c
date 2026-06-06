@@ -281,7 +281,6 @@ animation_clone_screen(struct screen *dst, struct screen *src)
 	screen_init(dst, sx, sy, 0);
 	screen_write_start(&ctx, dst);
 	screen_write_cursormove(&ctx, 0, 0, 0);
-	/* Grids store scrollback first; visible rows live at hsize..hsize+sy-1. */
 	screen_write_fast_copy(&ctx, src, 0, src->grid->hsize, sx, sy);
 	screen_write_stop(&ctx);
 }

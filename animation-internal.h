@@ -79,18 +79,10 @@ struct animation {
 	int			 src_row, src_start, src_end;
 	int			 tgt_row, tgt_start, tgt_end;
 
-	/*
-	 * ANIM_SLIDE_WINDOW: snapshots of each side's panes taken at begin
-	 * (and on retarget). src_wl/tgt_wl can be freed mid-animation —
-	 * notably when the animation was kicked off by killing the last pane
-	 * in a window, which destroys the source winlink and window.
-	 */
+	/* ANIM_SLIDE_WINDOW */
 	struct pane_anim	*sw_src_panes;
 	size_t			 sw_src_n;
 	int			 sw_src_active;
-	struct pane_anim	*sw_tgt_panes;
-	size_t			 sw_tgt_n;
-	int			 sw_tgt_active;
 
 	/* ANIM_PANE_LAYOUT */
 	struct window		*pl_window;
