@@ -1,40 +1,884 @@
+diff --git a/.github/README.md b/.github/README.md
+index 38a296fc..75f94a0d 100644
+--- a/.github/README.md
++++ b/.github/README.md
+@@ -1,95 +1,109 @@
+-# Welcome to tmux!
++# tmux-animated
+ 
+-tmux is a terminal multiplexer: it enables a number of terminals to be created,
+-accessed, and controlled from a single screen. tmux may be detached from a
+-screen and continue running in the background, then later reattached.
++![tmux-animated demo](../tmux-anim.gif)
+ 
+-This release runs on OpenBSD, FreeBSD, NetBSD, Linux, macOS and Solaris.
++A patch on top of upstream tmux that adds smooth animations for
++window switches, pane splits, resizes, and closes.
+ 
+-## Dependencies
++## What it animates
+ 
+-tmux depends on [libevent](https://libevent.org) 2.x, available from [this
+-page](https://github.com/libevent/libevent/releases/latest).
++- **Window switching** — the two windows' pane contents slide; the
++  active-window highlight in the status bar slides to its new tab.
++  In-flight retargeting: mash `next-window` repeatedly and the slide
++  rebases continuously instead of queueing.
++- **Pane resize** — borders smooth-move from old to new position.
++- **Pane split** — the new pane grows from zero into its final bounds.
++- **Pane close** — the dying pane shrinks toward its centre while
++  neighbours expand into the space. Works for `kill-pane` AND for
++  shell exits (e.g. `Ctrl-D`).
+ 
+-It also depends on [ncurses](https://www.gnu.org/software/ncurses/), available
+-from [this page](https://invisible-mirror.net/archives/ncurses/).
++## Install
+ 
+-To build tmux, a C compiler (for example gcc or clang), make, pkg-config and a
+-suitable yacc (yacc or bison) are needed.
++### Homebrew (macOS / Linuxbrew)
+ 
+-## Installation
++```bash
++brew tap jonaburg/tmux-animated
++brew install tmux-animated
++```
+ 
+-### Binary packages
++Installs as `tmux-animated`, leaving any existing `tmux` binary in
++place. Run `tmux-animated` instead of `tmux`, or alias it.
+ 
+-Some platforms provide binary packages for tmux, although these are sometimes
+-out of date. Examples are listed on
+-[this page](https://github.com/tmux/tmux/wiki/Installing).
++### One-shot install script
+ 
+-### From release tarball
++```bash
++curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/install.sh | bash
++```
+ 
+-To build and install tmux from a release tarball, use:
++Clones tmux at the tracked upstream version, applies the patch, builds,
++and installs to `/usr/local/bin/tmux-animated`. Requires `cc`,
++`autoconf`, `automake`, `pkg-config`, `libevent`, `ncurses`.
+ 
+-~~~bash
+-./configure && make
+-sudo make install
+-~~~
+-
+-tmux can use the utempter library to update utmp(5), if it is installed - run
+-configure with `--enable-utempter` to enable this.
+-
+-For more detailed instructions on building and installing tmux, see
+-[this page](https://github.com/tmux/tmux/wiki/Installing).
+-
+-### From version control
++### Apply the patch to your own tmux build
+ 
+-To get and build the latest from version control - note that this requires
+-`autoconf`, `automake` and `pkg-config`:
+-
+-~~~bash
++```bash
+ git clone https://github.com/tmux/tmux.git
+ cd tmux
+-sh autogen.sh
+-./configure && make
+-~~~
+-
+-## Contributing
++git checkout <commit-the-patch-was-made-against>
++curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/patches/tmux-animated-next-3.7.patch | patch -p1
++./autogen.sh && ./configure && make
++```
+ 
+-Bug reports, feature suggestions and especially code contributions are most
+-welcome. Please send by email to:
++The patch in `patches/` should be regenerated against each upstream tmux
++release; the filename indicates which.
+ 
+-tmux-users@googlegroups.com
++### Build from source
+ 
+-Or open a GitHub issue or pull request. **Please read [this
+-document](CONTRIBUTING.md) before opening an issue.**
+-
+-There is [a list of suggestions for contributions](https://github.com/tmux/tmux/wiki/Contributing).
+-Please feel free to ask on the mailing list if you're thinking of working on something or need
+-further information.
++```bash
++git clone -b animations https://github.com/jonaburg/tmux-animated.git
++cd tmux-animated
++./autogen.sh && ./configure && make
++sudo make install
++```
+ 
+-## Documentation
++## Configure
+ 
+-For documentation on using tmux, see the tmux.1 manpage. View it from the
+-source tree with:
++These session options control behaviour:
+ 
+-~~~bash
+-nroff -mdoc tmux.1|less
+-~~~
++| Option | Default | Meaning |
++|---|---|---|
++| `animation-enable` | `on` | Master switch. Off disables all animations. |
++| `animation-window-switch` | `slide` | `slide` or `off`. |
++| `animation-pane-layout` | `on` | Animate split / resize / close. |
++| `animation-duration` | `120` | Window slide duration (ms). |
++| `animation-pane-duration` | `80` | Pane animation duration (ms). |
++| `animation-easing` | `smoothdamp` | `smoothdamp`, `linear`, or `ease-in-out`. |
++| `animation-tau` | `40` | Smoothdamp time constant (ms). |
++| `animation-frame-interval` | `8` | Target frame interval (ms). |
++| `animation-status-highlight` | `on` | Animate the active-window tab highlight. |
+ 
+-A small example configuration is in `example_tmux.conf`.
++Example `~/.tmux.conf`:
+ 
+-And a bash(1) completion file at:
++```tmux
++set -g animation-duration 150
++set -g animation-pane-duration 150
++set -g animation-easing smoothdamp
++```
+ 
+-https://github.com/scop/bash-completion/blob/main/completions-core/tmux.bash
++If you keep the same config for both `tmux` and `tmux-animated`, vanilla
++tmux will warn about unknown options. Wrap them in an `if-shell`:
+ 
+-For debugging, run tmux with `-v` or `-vv` to generate server and client log
+-files in the current directory.
++```tmux
++if-shell '[ "$(tmux -V | awk "{print \$1}")" = "tmux-animated" ]' \
++    'set -g animation-duration 150'
++```
+ 
+-## Support
++## Caveats
+ 
+-The tmux mailing list for general discussion and bug reports is:
++- Per-frame paint cost scales with painted cells. On a typical 200×60
++  terminal at 120fps this is negligible; on a slow SSH link or very
++  large terminal you may want to bump `animation-frame-interval`
++  (lower fps) or reduce durations.
++- The default Homebrew install does not replace your system `tmux`.
++- Animations don't fire for control-mode clients (`tmux -CC`) or for
++  control sockets — they only run when the client has a real tty.
+ 
+-https://groups.google.com/forum/#!forum/tmux-users
+ 
+-Subscribe by sending an email to:
++## License
+ 
+-tmux-users+subscribe@googlegroups.com
++Same as upstream tmux (ISC).
+diff --git a/.github/workflows/mirror-releases.yml b/.github/workflows/mirror-releases.yml
+new file mode 100644
+index 00000000..24b7b519
+--- /dev/null
++++ b/.github/workflows/mirror-releases.yml
+@@ -0,0 +1,198 @@
++name: mirror-releases
++
++on:
++  schedule:
++    - cron: '30 6 * * *'
++  workflow_dispatch:
++
++permissions:
++  contents: write
++  issues: write
++
++jobs:
++  # Mirror the newest unmirrored upstream release into animations.
++  mirror-release:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Checkout animations (full history + tags)
++        uses: actions/checkout@v4
++        with:
++          ref: animations
++          fetch-depth: 0
++          token: ${{ secrets.GITHUB_TOKEN }}
++
++      - name: Install build deps
++        run: |
++          sudo apt-get update
++          sudo apt-get install -y --no-install-recommends \
++            build-essential autoconf automake pkg-config bison \
++            libevent-dev libncurses-dev libutempter-dev
++
++      - name: Fetch upstream tags
++        run: |
++          git remote add upstream https://github.com/tmux/tmux.git
++          git fetch upstream --tags --no-tags \
++            'refs/tags/[0-9]*:refs/tags/upstream-[0-9]*' || true
++          git fetch upstream 'refs/tags/*:refs/tags/upstream-*'
++
++      - name: Pick newest unmirrored upstream tag
++        id: pick
++        run: |
++          # All upstream release-shaped tags (e.g. 3.5, 3.5a, 3.6), newest first.
++          mapfile -t up < <(git tag --list 'upstream-[0-9]*' \
++            | sed 's/^upstream-//' \
++            | grep -E '^[0-9]+\.[0-9]+[a-z]?$' \
++            | sort -V -r)
++          for tag in "${up[@]}"; do
++            if ! git rev-parse -q --verify "refs/tags/v${tag}-animated" >/dev/null; then
++              echo "tag=$tag" >> "$GITHUB_OUTPUT"
++              echo "Picked upstream tag: $tag"
++              exit 0
++            fi
++          done
++          echo "All upstream release tags already mirrored."
++          echo "tag=" >> "$GITHUB_OUTPUT"
++
++      - name: Configure bot identity
++        if: steps.pick.outputs.tag != ''
++        run: |
++          git config user.name  'github-actions[bot]'
++          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
++
++      - name: Merge upstream tag into animations
++        if: steps.pick.outputs.tag != ''
++        id: merge
++        run: |
++          TAG="${{ steps.pick.outputs.tag }}"
++          if ! git merge --no-edit --no-ff "upstream-${TAG}" \
++                -m "Merge upstream tmux ${TAG} into animations"; then
++            # configure.ac's AC_INIT version string is the only line that
++            # conflicts on every release. Resolve only hunks where the
++            # sole difference is AC_INIT, taking upstream's value. Leave
++            # other hunks marked so they fall through to the issue path.
++            if git diff --name-only --diff-filter=U | grep -qx configure.ac; then
++              UPSTREAM_AC_INIT=$(git show "upstream-${TAG}:configure.ac" \
++                | grep -E '^AC_INIT\(' | head -1)
++              if [ -n "$UPSTREAM_AC_INIT" ]; then
++                python3 - "$UPSTREAM_AC_INIT" <<'PY'
++import sys, pathlib
++upstream = sys.argv[1].rstrip('\n') + '\n'
++p = pathlib.Path('configure.ac')
++src = p.read_text().splitlines(keepends=True)
++out, i = [], 0
++while i < len(src):
++    line = src[i]
++    if not line.startswith('<<<<<<<'):
++        out.append(line); i += 1
++        continue
++    ours, theirs = [], []
++    i += 1
++    while i < len(src) and not src[i].startswith('======='):
++        ours.append(src[i]); i += 1
++    i += 1
++    while i < len(src) and not src[i].startswith('>>>>>>>'):
++        theirs.append(src[i]); i += 1
++    i += 1
++    ours_no = [l for l in ours if not l.startswith('AC_INIT(')]
++    theirs_no = [l for l in theirs if not l.startswith('AC_INIT(')]
++    if ours_no == theirs_no:
++        out.extend(upstream if l.startswith('AC_INIT(') else l for l in ours)
++    else:
++        out.append(line)
++        out.extend(ours)
++        out.append('=======\n')
++        out.extend(theirs)
++        out.append('>>>>>>> theirs\n')
++p.write_text(''.join(out))
++PY
++                if ! grep -qE '^(<<<<<<<|=======|>>>>>>>)' configure.ac; then
++                  git add configure.ac
++                fi
++              fi
++            fi
++            REMAINING=$(git diff --name-only --diff-filter=U)
++            if [ -z "$REMAINING" ]; then
++              git commit --no-edit
++              echo "conflict=false" >> "$GITHUB_OUTPUT"
++              exit 0
++            fi
++            FILES=$(printf '%s' "$REMAINING" | head -50)
++            STATUS=$(git status --short | head -50)
++            {
++              echo "files<<__EOF__"
++              echo "$FILES"
++              echo "__EOF__"
++              echo "status<<__EOF__"
++              echo "$STATUS"
++              echo "__EOF__"
++            } >> "$GITHUB_OUTPUT"
++            git merge --abort || true
++            echo "conflict=true" >> "$GITHUB_OUTPUT"
++            exit 0
++          fi
++          echo "conflict=false" >> "$GITHUB_OUTPUT"
++
++      - name: Regenerate patch
++        if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'false'
++        run: |
++          git fetch origin master:refs/remotes/origin/master
++          git diff origin/master..HEAD -- ':!patches/' \
++            > patches/tmux-animated-next-3.7.patch
++          if ! git diff --quiet -- patches/; then
++            git add patches/tmux-animated-next-3.7.patch
++            git commit -m "Regenerate patch for tmux ${{ steps.pick.outputs.tag }}"
++          fi
++
++      - name: Build to verify
++        if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'false'
++        run: |
++          ./autogen.sh
++          ./configure
++          make -j"$(nproc)"
++          ./tmux -V
++
++      - name: Push to animations and tag release
++        if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'false'
++        env:
++          TAG: ${{ steps.pick.outputs.tag }}
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          REL="v${TAG}-animated"
++          if git rev-parse -q --verify "refs/tags/${REL}" >/dev/null; then
++            echo "Tag ${REL} already exists; nothing to push."
++            exit 0
++          fi
++          # Fast-forward animations to the just-merged HEAD, then tag.
++          git push origin "HEAD:refs/heads/animations"
++          git tag -a "${REL}" -m "tmux-animated for tmux ${TAG}"
++          git push origin "${REL}"
++
++      - name: Ensure issue labels exist
++        if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'true'
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          gh label create upstream-drift --force \
++            --color cc7700 \
++            --description "Upstream sync needs manual attention" || true
++
++      - name: Open issue on merge conflict
++        if: steps.pick.outputs.tag != '' && steps.merge.outputs.conflict == 'true'
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++          TAG: ${{ steps.pick.outputs.tag }}
++          FILES: ${{ steps.merge.outputs.files }}
++          STATUS: ${{ steps.merge.outputs.status }}
++        run: |
++          {
++            printf 'Could not merge upstream tag `%s` into `animations`. Manual merge required.\n\n' "$TAG"
++            printf 'Run: %s/%s/actions/runs/%s\n\n' \
++              "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}"
++            printf '## Conflicting files\n\n```\n%s\n```\n\n' "$FILES"
++            printf '## git status\n\n```\n%s\n```\n\n' "$STATUS"
++            printf '## Reproduce locally\n\n```sh\ngit fetch upstream --tags\ngit checkout animations\ngit merge --no-edit --no-ff upstream-%s\n```\n' "$TAG"
++          } > /tmp/issue-body.md
++          gh api -X POST "/repos/${{ github.repository }}/issues" \
++            -f "title=Release sync conflict: tmux ${TAG}" \
++            -f "body=$(cat /tmp/issue-body.md)" \
++            -f "labels[]=upstream-drift"
+diff --git a/.github/workflows/upstream-check.yml b/.github/workflows/upstream-check.yml
+new file mode 100644
+index 00000000..666c2787
+--- /dev/null
++++ b/.github/workflows/upstream-check.yml
+@@ -0,0 +1,250 @@
++name: upstream-check
++
++on:
++  schedule:
++    - cron: '0 6 * * *'
++  workflow_dispatch:
++  push:
++    branches: [master]
++    paths:
++      - 'patches/**'
++      - '.github/workflows/upstream-check.yml'
++
++permissions:
++  contents: write
++  issues: write
++  pull-requests: write
++
++jobs:
++  apply-and-build:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Ensure issue labels exist
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          gh label create upstream-drift --force \
++            --color cc7700 \
++            --description "Upstream sync needs manual attention" \
++            -R ${{ github.repository }} || true
++
++      - name: Checkout tmux-animated
++        uses: actions/checkout@v4
++        with:
++          path: tmux-animated
++
++      - name: Install build deps
++        run: |
++          sudo apt-get update
++          sudo apt-get install -y --no-install-recommends \
++            build-essential autoconf automake pkg-config bison \
++            libevent-dev libncurses-dev libutempter-dev
++
++      - name: Clone upstream tmux master
++        run: git clone --depth=1 https://github.com/tmux/tmux.git upstream-tmux
++
++      - name: Record upstream SHA
++        id: upstream
++        run: |
++          cd upstream-tmux
++          echo "sha=$(git rev-parse HEAD)"           >> "$GITHUB_OUTPUT"
++          echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
++
++      - name: Apply patch
++        run: |
++          cd upstream-tmux
++          git apply --index --whitespace=nowarn \
++            ../tmux-animated/patches/tmux-animated-next-3.7.patch
++
++      - name: Build
++        run: |
++          cd upstream-tmux
++          ./autogen.sh
++          ./configure
++          make -j"$(nproc)"
++
++      - name: Smoke test binary
++        run: |
++          cd upstream-tmux
++          ./tmux -V
++
++      - name: Open issue on failure
++        if: failure()
++        uses: actions/github-script@v7
++        with:
++          script: |
++            const title = `upstream-check failed against tmux/tmux@${{ steps.upstream.outputs.short }}`;
++            const body  = [
++              `The scheduled upstream check failed.`,
++              ``,
++              `- Upstream SHA: \`${{ steps.upstream.outputs.sha }}\``,
++              `- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
++              ``,
++              `The patch likely no longer applies cleanly, or the build broke.`,
++            ].join('\n');
++
++            const { data: existing } = await github.rest.issues.listForRepo({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              state: 'open',
++              labels: 'upstream-drift',
++              per_page: 100,
++            });
++            if (existing.some(i => i.title.startsWith('upstream-check failed'))) {
++              core.info('Open upstream-drift issue already exists; skipping.');
++              return;
++            }
++            await github.rest.issues.create({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              title,
++              body,
++              labels: ['upstream-drift'],
++            });
++
++  open-sync-pr:
++    runs-on: ubuntu-latest
++    needs: apply-and-build
++    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
++    steps:
++      - name: Checkout animations (full history)
++        uses: actions/checkout@v4
++        with:
++          ref: animations
++          fetch-depth: 0
++          token: ${{ secrets.GITHUB_TOKEN }}
++
++      - name: Install build deps
++        run: |
++          sudo apt-get update
++          sudo apt-get install -y --no-install-recommends \
++            build-essential autoconf automake pkg-config bison \
++            libevent-dev libncurses-dev libutempter-dev
++
++      - name: Add upstream remote and fetch
++        run: |
++          git remote add upstream https://github.com/tmux/tmux.git
++          git fetch upstream master
++          echo "UPSTREAM_SHA=$(git rev-parse upstream/master)"           >> "$GITHUB_ENV"
++          echo "UPSTREAM_SHORT=$(git rev-parse --short upstream/master)" >> "$GITHUB_ENV"
++
++      - name: Bail if already up to date
++        id: check
++        run: |
++          if git merge-base --is-ancestor "$UPSTREAM_SHA" HEAD; then
++            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
++            echo "animations already contains upstream/master ($UPSTREAM_SHORT). Nothing to do."
++          else
++            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
++          fi
++
++      - name: Configure bot identity
++        if: steps.check.outputs.up_to_date == 'false'
++        run: |
++          git config user.name  'github-actions[bot]'
++          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
++
++      - name: Create sync branch and merge upstream
++        if: steps.check.outputs.up_to_date == 'false'
++        id: merge
++        run: |
++          BRANCH="bot/upstream-sync-${UPSTREAM_SHORT}"
++          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
++          git checkout -b "$BRANCH"
++          if ! git merge --no-edit --no-ff upstream/master \
++                -m "Merge upstream tmux/tmux@${UPSTREAM_SHORT} into animations"; then
++            echo "conflict=true" >> "$GITHUB_OUTPUT"
++            git merge --abort || true
++            exit 0
++          fi
++          echo "conflict=false" >> "$GITHUB_OUTPUT"
++
++      - name: Regenerate patch file
++        if: steps.check.outputs.up_to_date == 'false' && steps.merge.outputs.conflict == 'false'
++        run: |
++          git fetch origin master:refs/remotes/origin/master
++          git diff origin/master..HEAD -- ':!patches/' \
++            > patches/tmux-animated-next-3.7.patch
++          if ! git diff --quiet -- patches/; then
++            git add patches/tmux-animated-next-3.7.patch
++            git commit -m "Regenerate patch against upstream@${UPSTREAM_SHORT}"
++          fi
++
++      - name: Build to verify
++        if: steps.check.outputs.up_to_date == 'false' && steps.merge.outputs.conflict == 'false'
++        run: |
++          ./autogen.sh
++          ./configure
++          make -j"$(nproc)"
++          ./tmux -V
++
++      - name: Push branch
++        if: steps.check.outputs.up_to_date == 'false' && steps.merge.outputs.conflict == 'false'
++        run: git push --force-with-lease origin "${{ steps.merge.outputs.branch }}"
++
++      - name: Open or update PR
++        if: steps.check.outputs.up_to_date == 'false' && steps.merge.outputs.conflict == 'false'
++        uses: actions/github-script@v7
++        env:
++          BRANCH: ${{ steps.merge.outputs.branch }}
++        with:
++          script: |
++            const branch = process.env.BRANCH;
++            const short  = process.env.UPSTREAM_SHORT;
++            const title  = `Sync upstream tmux/tmux@${short} into animations`;
++            const body   = [
++              `Automated upstream sync.`,
++              ``,
++              `- Upstream SHA: \`${process.env.UPSTREAM_SHA}\``,
++              `- Patch regenerated against \`origin/master\`.`,
++              `- Build + \`tmux -V\` smoke test passed on \`ubuntu-latest\`.`,
++              ``,
++              `Review the merge and the regenerated patch before merging.`,
++            ].join('\n');
++
++            const { data: open } = await github.rest.pulls.list({
++              owner: context.repo.owner,
++              repo:  context.repo.repo,
++              head:  `${context.repo.owner}:${branch}`,
++              state: 'open',
++            });
++            if (open.length === 0) {
++              await github.rest.pulls.create({
++                owner: context.repo.owner,
++                repo:  context.repo.repo,
++                head:  branch,
++                base:  'animations',
++                title, body,
++              });
++            } else {
++              core.info(`PR #${open[0].number} already open for ${branch}; branch updated in place.`);
++            }
++
++      - name: Open issue on merge conflict
++        if: steps.check.outputs.up_to_date == 'false' && steps.merge.outputs.conflict == 'true'
++        uses: actions/github-script@v7
++        with:
++          script: |
++            const title = `upstream sync: merge conflict against tmux/tmux@${process.env.UPSTREAM_SHORT}`;
++            const body  = [
++              `Tried to merge \`upstream/master\` into \`animations\` and hit conflicts.`,
++              ``,
++              `- Upstream SHA: \`${process.env.UPSTREAM_SHA}\``,
++              `- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
++              ``,
++              `Manual merge required.`,
++            ].join('\n');
++            const { data: existing } = await github.rest.issues.listForRepo({
++              owner: context.repo.owner,
++              repo:  context.repo.repo,
++              state: 'open',
++              labels: 'upstream-drift',
++              per_page: 100,
++            });
++            if (existing.some(i => i.title.startsWith('upstream sync: merge conflict'))) return;
++            await github.rest.issues.create({
++              owner: context.repo.owner,
++              repo:  context.repo.repo,
++              title, body,
++              labels: ['upstream-drift'],
++            });
 diff --git a/Makefile.am b/Makefile.am
-index ba9142fe..14cf8d89 100644
+index ba9142fe..b5ac9616 100644
 --- a/Makefile.am
 +++ b/Makefile.am
-@@ -84,6 +84,7 @@ endif
+@@ -84,6 +84,10 @@ endif
  # List of sources.
  dist_tmux_SOURCES = \
  	alerts.c \
 +	animation.c \
++	animation-window.c \
++	animation-pane.c \
++	animation-scroll.c \
  	arguments.c \
  	attributes.c \
  	cfg.c \
-diff --git a/animation.c b/animation.c
+diff --git a/README b/README
+deleted file mode 100644
+index 9a2f6ff7..00000000
+--- a/README
++++ /dev/null
+@@ -1,87 +0,0 @@
+-Welcome to tmux!
+-
+-tmux is a terminal multiplexer: it enables a number of terminals to be created,
+-accessed, and controlled from a single screen. tmux may be detached from a
+-screen and continue running in the background, then later reattached.
+-
+-This release runs on OpenBSD, FreeBSD, NetBSD, Linux, macOS and Solaris.
+-
+-* Dependencies
+-
+-tmux depends on libevent 2.x, available from:
+-
+-	https://github.com/libevent/libevent/releases/latest
+-
+-It also depends on ncurses, available from:
+-
+-	https://invisible-mirror.net/archives/ncurses/
+-
+-To build tmux, a C compiler (for example gcc or clang), make, pkg-config and a
+-suitable yacc (yacc or bison) are needed.
+-
+-* Installation
+-
+-To build and install tmux from a release tarball, use:
+-
+-	$ ./configure && make
+-	$ sudo make install
+-
+-tmux can use the utempter library to update utmp(5), if it is installed - run
+-configure with --enable-utempter to enable this.
+-
+-To get and build the latest from version control - note that this requires
+-autoconf, automake and pkg-config:
+-
+-	$ git clone https://github.com/tmux/tmux.git
+-	$ cd tmux
+-	$ sh autogen.sh
+-	$ ./configure && make
+-	$ sudo make install
+-
+-* Contributing
+-
+-Bug reports, feature suggestions and especially code contributions are most
+-welcome. Please send by email to:
+-
+-	tmux-users@googlegroups.com
+-
+-Or open a GitHub issue or pull request.
+-
+-* Documentation
+-
+-For documentation on using tmux, see the tmux.1 manpage. View it from the
+-source tree with:
+-
+-	$ nroff -mdoc tmux.1|less
+-
+-A small example configuration is in example_tmux.conf.
+-
+-Other documentation is available in the wiki:
+-
+-	https://github.com/tmux/tmux/wiki
+-
+-Also see the tmux FAQ at:
+-
+-	https://github.com/tmux/tmux/wiki/FAQ
+-
+-A bash(1) completion file is at:
+-
+-	https://github.com/scop/bash-completion/blob/main/completions/tmux
+-
+-For debugging, run tmux with -v and -vv to generate server and client log files
+-in the current directory.
+-
+-* Support
+-
+-The tmux mailing list for general discussion and bug reports is:
+-
+-	https://groups.google.com/forum/#!forum/tmux-users
+-
+-Subscribe by sending an email to:
+-
+-	tmux-users+subscribe@googlegroups.com
+-
+-* License
+-
+-This file and the CHANGES files are licensed under the ISC license. All other
+-files have a license and copyright notice at their start.
+diff --git a/README.md b/README.md
 new file mode 100644
-index 00000000..3cd22311
+index 00000000..322feed7
 --- /dev/null
-+++ b/animation.c
-@@ -0,0 +1,1099 @@
-+/* $OpenBSD$ */
++++ b/README.md
+@@ -0,0 +1,113 @@
++# tmux-animated
 +
-+/*
-+ * Animated transitions for tmux. Frames are paced by an animation_timer
-+ * libevent; each tick advances state and forces a client redraw, which
-+ * invokes overlay_draw to paint the frame.
-+ */
++![tmux-animated demo](tmux-anim.gif)
 +
-+#include <sys/types.h>
++A patch on top of upstream tmux that adds smooth animations for
++window switches, pane splits, resizes, and closes.
 +
-+#include <math.h>
-+#include <stdlib.h>
-+#include <string.h>
++## What it animates
 +
-+#include "tmux.h"
++- **Window switching** — the two windows' pane contents slide; the
++  active-window highlight in the status bar slides to its new tab.
++  In-flight retargeting: mash `next-window` repeatedly and the slide
++  rebases continuously instead of queueing.
++- **Pane resize** — borders smooth-move from old to new position.
++- **Pane split** — the new pane grows from zero into its final bounds.
++- **Pane close** — the dying pane shrinks toward its centre while
++  neighbours expand into the space. Works for `kill-pane` AND for
++  shell exits (e.g. `Ctrl-D`).
++
++## Install
++
++### Homebrew (macOS / Linuxbrew)
++
++```bash
++brew tap jonaburg/tmux-animated
++brew install tmux-animated
++```
++
++Installs as `tmux-animated`, leaving any existing `tmux` binary in
++place. Run `tmux-animated` instead of `tmux`, or alias it.
++
++### One-shot install script
++
++```bash
++curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/install.sh | bash
++```
++
++Clones tmux at the tracked upstream version, applies the patch, builds,
++and installs to `/usr/local/bin/tmux-animated`. Requires `cc`,
++`autoconf`, `automake`, `pkg-config`, `libevent`, `ncurses`.
++
++### Apply the patch to your own tmux build
++
++```bash
++git clone https://github.com/tmux/tmux.git
++cd tmux
++git checkout <commit-the-patch-was-made-against>
++curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/patches/tmux-animated-next-3.7.patch | patch -p1
++./autogen.sh && ./configure && make
++```
++
++The patch in `patches/` should be regenerated against each upstream tmux
++release; the filename indicates which.
++
++### Build from source
++
++```bash
++git clone -b animations https://github.com/jonaburg/tmux-animated.git
++cd tmux-animated
++./autogen.sh && ./configure && make
++sudo make install
++```
++
++## Configure
++
++These session options control behaviour:
++
++| Option | Default | Meaning |
++|---|---|---|
++| `animation-enable` | `on` | Master switch. Off disables all animations. |
++| `animation-window-switch` | `slide` | `slide` or `off`. |
++| `animation-pane-layout` | `on` | Animate split / close. |
++| `animation-pane-borders` | `on` | Draw pane borders during pane layout animations. |
++| `animation-alt-screen` | `on` | Animate programs entering / leaving the alternate screen (vim, htop, less, ...). |
++| `animation-scroll` | `on` | Smooth-scroll copy-mode PageUp/PageDown and mouse-wheel scrolling. |
++| `animation-scroll-duration` | `150` | Scroll animation duration (ms). |
++| `animation-duration` | `120` | Window slide duration (ms). |
++| `animation-pane-duration` | `80` | Pane animation duration (ms). |
++| `animation-easing` | `smoothdamp` | `smoothdamp`, `linear`, or `ease-in-out`. |
++| `animation-tau` | `40` | Smoothdamp time constant (ms). |
++| `animation-frame-interval` | `8` | Target frame interval (ms). |
++| `animation-status-highlight` | `on` | Animate the active-window tab highlight. |
++
++Example `~/.tmux.conf`:
++
++```tmux
++set -g animation-duration 150
++set -g animation-pane-duration 150
++set -g animation-easing smoothdamp
++```
++
++If you keep the same config for both `tmux` and `tmux-animated`, vanilla
++tmux will warn about unknown options. Wrap them in an `if-shell`:
++
++```tmux
++if-shell '[ "$(tmux -V | awk "{print \$1}")" = "tmux-animated" ]' \
++    'set -g animation-duration 150'
++```
++
++## Caveats
++
++- Per-frame paint cost scales with painted cells. On a typical 200×60
++  terminal at 120fps this is negligible; on a slow SSH link or very
++  large terminal you may want to bump `animation-frame-interval`
++  (lower fps) or reduce durations.
++- The default Homebrew install does not replace your system `tmux`.
++- Animations don't fire for control-mode clients (`tmux -CC`) or for
++  control sockets — they only run when the client has a real tty.
++
++
++## License
++
++Same as upstream tmux (ISC).
+diff --git a/animation-internal.h b/animation-internal.h
+new file mode 100644
+index 00000000..00ef8132
+--- /dev/null
++++ b/animation-internal.h
+@@ -0,0 +1,128 @@
++/* Shared internals for animation.c and animation-*.c kind-specific files. */
++
++#ifndef TMUX_ANIMATION_INTERNAL_H
++#define TMUX_ANIMATION_INTERNAL_H
 +
 +enum animation_kind {
 +	ANIM_SLIDE_WINDOW,
 +	ANIM_PANE_LAYOUT,
++	ANIM_SCROLL,
 +};
 +
 +enum pane_anim_phase {
@@ -50,8 +894,11 @@ index 00000000..3cd22311
 +	int			 src_x, src_y, src_w, src_h;
 +	int			 tgt_x, tgt_y, tgt_w, tgt_h;
 +
-+	struct screen		*snapshot;	/* DYING only */
++	struct screen		*snapshot;
 +	struct colour_palette	 snapshot_palette;
++
++	struct screen		*backdrop;
++	struct colour_palette	 backdrop_palette;
 +};
 +
 +struct pane_layout_capture {
@@ -94,6 +941,8 @@ index 00000000..3cd22311
 +	u_int			 sy;
 +	u_int			 pane_y0;
 +	u_int			 pane_h;
++	u_int			 pane_x0;
++	u_int			 pane_w;
 +
 +	int			 status_active;
 +	int			 status_y0;
@@ -107,35 +956,929 @@ index 00000000..3cd22311
 +	struct pane_anim	*pl_panes;
 +	size_t			 pl_n;
 +
++	/* ANIM_SCROLL */
++	struct screen		*scroll_snap;
++	struct colour_palette	 scroll_palette;
++	double			 scroll_src_off;
++	double			 scroll_tgt_off;
++	int			 scroll_snap_max_oy;
++
 +	struct visible_ranges	 vis;
 +};
 +
-+static void animation_frame_cb(int, short, void *);
-+static struct visible_ranges *animation_check_cb(struct client *, void *,
-+		    u_int, u_int, u_int);
-+static void	animation_draw_cb(struct client *, void *,
-+		    struct screen_redraw_ctx *);
-+static int	animation_key_cb(struct client *, void *, struct key_event *);
-+static void	animation_free_cb(struct client *, void *);
-+static void	animation_resize_cb(struct client *, void *);
-+static void	animation_scan_status(struct client *, struct animation *);
++/* Shared helpers (animation.c). */
++enum animation_easing	 animation_easing_lookup(struct session *);
++double			 animation_ease_cubic_in_out(double);
++void			 animation_clone_screen(struct screen *,
++			     struct screen *);
++uint64_t		 get_timer(void);
++
++/* Overlay callbacks live in animation.c and are used by every begin_*. */
++struct visible_ranges	*animation_check_cb(struct client *, void *,
++			     u_int, u_int, u_int);
++void			 animation_draw_cb(struct client *, void *,
++			     struct screen_redraw_ctx *);
++int			 animation_key_cb(struct client *, void *,
++			     struct key_event *);
++void			 animation_free_cb(struct client *, void *);
++void			 animation_resize_cb(struct client *, void *);
++void			 animation_frame_cb(int, short, void *);
++
++/* Per-kind draw entry points dispatched from animation_draw_cb. */
++void			 animation_window_draw(struct client *,
++			     struct animation *);
++void			 animation_pane_draw(struct client *,
++			     struct animation *, double);
++void			 animation_scroll_draw(struct client *,
++			     struct animation *);
++
++/* Per-kind free entry points called from animation_free_cb. */
++void			 animation_window_free(struct animation *);
++void			 animation_pane_free(struct animation *);
++void			 animation_scroll_free(struct animation *);
++
++#endif
+diff --git a/animation-pane.c b/animation-pane.c
+new file mode 100644
+index 00000000..1f1e6da3
+--- /dev/null
++++ b/animation-pane.c
+@@ -0,0 +1,684 @@
++/* $OpenBSD$ */
++
++/*
++ * Pane-layout animations (ANIM_PANE_LAYOUT): split/kill/zoom, plus the
++ * single-pane variant used for alt-screen program takeover.
++ */
++
++#include <sys/types.h>
++
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "tmux.h"
++#include "animation-internal.h"
++
 +static void	animation_free_capture(struct client *);
-+static void	animation_clone_screen(struct screen *, struct screen *);
-+static void	animation_pane_draw(struct client *, struct animation *,
-+		    double);
++static struct pane_anim *animation_capture_find_pane(
++		    struct pane_layout_capture *, int);
++static struct window_pane *animation_find_pane(struct window *, int);
++static void	animation_paint_pane_clipped(struct client *, struct screen *,
++		    struct colour_palette *, int, int, int, int);
++static void	animation_paint_border_cell(struct client *, struct window *,
++		    enum pane_lines, struct grid_cell *, int, int, int);
++static void	animation_paint_pane_border(struct client *, struct window *,
++		    int, int, int, int, int);
++static void	animation_begin_alt_screen_one(struct client *,
++		    struct window_pane *, struct screen *, int);
++static void	animation_alt_screen_broadcast(struct window_pane *,
++		    struct screen *, int);
 +
-+static enum animation_easing
-+animation_easing_lookup(struct session *s)
++static void
++animation_free_capture(struct client *c)
 +{
-+	int	n = options_get_number(s->options, "animation-easing");
++	struct pane_layout_capture	*cap = c->animation_capture;
 +
-+	switch (n) {
-+	case 0: return (ANIM_EASE_SMOOTHDAMP);
-+	case 1: return (ANIM_EASE_LINEAR);
-+	case 2: return (ANIM_EASE_IN_OUT);
++	if (cap == NULL)
++		return;
++	if (cap->dying_snapshot != NULL) {
++		screen_free(cap->dying_snapshot);
++		free(cap->dying_snapshot);
 +	}
-+	return (ANIM_EASE_SMOOTHDAMP);
++	free(cap->panes);
++	free(cap);
++	c->animation_capture = NULL;
 +}
++
++void
++animation_begin_pane_layout(struct client *c, struct window *w,
++    struct window_pane *dying_wp)
++{
++	struct pane_layout_capture	*cap;
++	struct window_pane		*wp;
++	size_t				 i;
++
++	if (c == NULL || w == NULL || c->session == NULL)
++		return;
++	if (!options_get_number(c->session->options, "animation-enable"))
++		return;
++	if (!options_get_number(c->session->options, "animation-pane-layout"))
++		return;
++	if (c->tty.sx == 0 || c->tty.sy == 0)
++		return;
++	if (c->overlay_draw != NULL && c->animation == NULL)
++		return;
++
++	if (c->animation_capture != NULL)
++		animation_free_capture(c);
++
++	cap = xcalloc(1, sizeof *cap);
++	cap->w = w;
++	cap->dying_id = (dying_wp != NULL) ? (int)dying_wp->id : -1;
++
++	TAILQ_FOREACH(wp, &w->panes, entry)
++		cap->cap++;
++	if (cap->cap == 0) {
++		free(cap);
++		return;
++	}
++	cap->panes = xcalloc(cap->cap, sizeof *cap->panes);
++
++	i = 0;
++	TAILQ_FOREACH(wp, &w->panes, entry) {
++		struct pane_anim *pa = &cap->panes[i++];
++		pa->pane_id = wp->id;
++		pa->src_x = wp->xoff;
++		pa->src_y = wp->yoff;
++		pa->src_w = wp->sx;
++		pa->src_h = wp->sy;
++		if (wp->screen != NULL) {
++			pa->snapshot = xcalloc(1, sizeof *pa->snapshot);
++			animation_clone_screen(pa->snapshot, wp->screen);
++			memcpy(&pa->snapshot_palette, &wp->palette,
++			    sizeof pa->snapshot_palette);
++		}
++	}
++	cap->n = i;
++	(void)dying_wp;
++
++	c->animation_capture = cap;
++}
++
++static struct pane_anim *
++animation_capture_find_pane(struct pane_layout_capture *cap, int pane_id)
++{
++	size_t	i;
++	for (i = 0; i < cap->n; i++)
++		if (cap->panes[i].pane_id == pane_id)
++			return (&cap->panes[i]);
++	return (NULL);
++}
++
++void
++animation_commit_pane_layout(struct client *c, struct window *w)
++{
++	struct pane_layout_capture	*cap;
++	struct window_pane		*wp;
++	struct animation		*a;
++	struct timeval			 tv;
++	struct pane_anim		*pa;
++	size_t				 i;
++	int				 dirty = 0;
++	int				 y0, y1;
++
++	if (c == NULL)
++		return;
++	cap = c->animation_capture;
++	if (cap == NULL)
++		return;
++	if (cap->w != w || c->animation != NULL) {
++		animation_free_capture(c);
++		return;
++	}
++
++	for (i = 0; i < cap->n; i++) {
++		struct window_pane	*found = NULL;
++		pa = &cap->panes[i];
++		TAILQ_FOREACH(wp, &w->panes, entry) {
++			if ((int)wp->id == pa->pane_id) {
++				found = wp;
++				break;
++			}
++		}
++		if (found != NULL) {
++			pa->tgt_x = found->xoff;
++			pa->tgt_y = found->yoff;
++			pa->tgt_w = found->sx;
++			pa->tgt_h = found->sy;
++			pa->phase = PANE_RESIZE;
++		} else {
++			pa->phase = PANE_DYING;
++			pa->tgt_x = pa->src_x + pa->src_w / 2;
++			pa->tgt_y = pa->src_y + pa->src_h / 2;
++			pa->tgt_w = 0;
++			pa->tgt_h = 0;
++		}
++		if (pa->src_x != pa->tgt_x || pa->src_y != pa->tgt_y ||
++		    pa->src_w != pa->tgt_w || pa->src_h != pa->tgt_h)
++			dirty = 1;
++	}
++
++	TAILQ_FOREACH(wp, &w->panes, entry) {
++		if (animation_capture_find_pane(cap, wp->id) != NULL)
++			continue;
++		if (cap->n >= cap->cap) {
++			cap->cap = cap->cap * 2 + 1;
++			cap->panes = xreallocarray(cap->panes, cap->cap,
++			    sizeof *cap->panes);
++		}
++		pa = &cap->panes[cap->n++];
++		memset(pa, 0, sizeof *pa);
++		pa->pane_id = wp->id;
++		pa->phase = PANE_BORN;
++		pa->src_x = wp->xoff + wp->sx / 2;
++		pa->src_y = wp->yoff + wp->sy / 2;
++		pa->src_w = 0;
++		pa->src_h = 0;
++		pa->tgt_x = wp->xoff;
++		pa->tgt_y = wp->yoff;
++		pa->tgt_w = wp->sx;
++		pa->tgt_h = wp->sy;
++		dirty = 1;
++	}
++
++	if (!dirty) {
++		animation_free_capture(c);
++		return;
++	}
++
++	a = xcalloc(1, sizeof *a);
++	a->client = c;
++	a->kind = ANIM_PANE_LAYOUT;
++	a->easing = animation_easing_lookup(c->session);
++	a->duration_ms = options_get_number(c->session->options,
++	    "animation-pane-duration");
++	a->frame_interval_ms = options_get_number(c->session->options,
++	    "animation-frame-interval");
++	a->sx = c->tty.sx;
++	a->sy = c->tty.sy;
++
++	{
++		int	x0 = a->sx, x1 = 0;
++
++		y0 = a->sy;
++		y1 = 0;
++		for (i = 0; i < cap->n; i++) {
++			pa = &cap->panes[i];
++			if (pa->phase == PANE_RESIZE &&
++			    pa->src_x == pa->tgt_x &&
++			    pa->src_y == pa->tgt_y &&
++			    pa->src_w == pa->tgt_w &&
++			    pa->src_h == pa->tgt_h)
++				continue;
++			if (pa->src_y < y0) y0 = pa->src_y;
++			if (pa->src_y + pa->src_h > y1)
++				y1 = pa->src_y + pa->src_h;
++			if (pa->tgt_y < y0) y0 = pa->tgt_y;
++			if (pa->tgt_y + pa->tgt_h > y1)
++				y1 = pa->tgt_y + pa->tgt_h;
++			if (pa->src_x < x0) x0 = pa->src_x;
++			if (pa->src_x + pa->src_w > x1)
++				x1 = pa->src_x + pa->src_w;
++			if (pa->tgt_x < x0) x0 = pa->tgt_x;
++			if (pa->tgt_x + pa->tgt_w > x1)
++				x1 = pa->tgt_x + pa->tgt_w;
++		}
++		if (y1 <= y0 || x1 <= x0) {
++			free(a);
++			animation_free_capture(c);
++			return;
++		}
++		a->pane_y0 = (u_int)y0;
++		a->pane_h = (u_int)(y1 - y0);
++		a->pane_x0 = (u_int)x0;
++		a->pane_w = (u_int)(x1 - x0);
++	}
++
++	a->pl_window = w;
++	a->pl_panes = cap->panes;
++	a->pl_n = cap->n;
++	cap->panes = NULL;
++	cap->n = 0;
++
++	a->start_ms = get_timer();
++	a->last_ms = a->start_ms;
++
++	c->animation = a;
++
++	server_client_set_overlay(c, 0, animation_check_cb, NULL,
++	    animation_draw_cb, animation_key_cb, animation_free_cb,
++	    animation_resize_cb, a);
++
++	evtimer_set(&c->animation_timer, animation_frame_cb, c);
++	tv.tv_sec = 0;
++	tv.tv_usec = (long)a->frame_interval_ms * 1000L;
++	evtimer_add(&c->animation_timer, &tv);
++
++	animation_free_capture(c);
++}
++
++static struct window_pane *
++animation_find_pane(struct window *w, int id)
++{
++	struct window_pane	*wp;
++
++	if (w == NULL)
++		return (NULL);
++	TAILQ_FOREACH(wp, &w->panes, entry) {
++		if ((int)wp->id == id)
++			return (wp);
++	}
++	return (NULL);
++}
++
++static void
++animation_paint_pane_clipped(struct client *c, struct screen *s,
++    struct colour_palette *palette,
++    int dst_x, int dst_y, int dst_w, int dst_h)
++{
++	struct grid_cell	defaults;
++	u_int			sy, src_sx, src_sy;
++	int			nx;
++
++	if (s == NULL || dst_w <= 0 || dst_h <= 0)
++		return;
++	memcpy(&defaults, &grid_default_cell, sizeof defaults);
++
++	src_sx = screen_size_x(s);
++	src_sy = screen_size_y(s);
++	nx = dst_w;
++	if (nx > (int)src_sx) nx = (int)src_sx;
++	if (dst_x + nx > (int)c->tty.sx) nx = (int)c->tty.sx - dst_x;
++	if (nx <= 0)
++		return;
++
++	for (sy = 0; sy < (u_int)dst_h && sy < src_sy; sy++) {
++		int vy = dst_y + sy;
++		if (vy < 0 || vy >= (int)c->tty.sy)
++			continue;
++		tty_draw_line(&c->tty, s, 0, sy, (u_int)nx,
++		    (u_int)dst_x, (u_int)vy, &defaults, palette);
++	}
++}
++
++static void
++animation_paint_border_cell(struct client *c, struct window *w,
++    enum pane_lines pane_lines, struct grid_cell *style, int cell_type,
++    int x, int y)
++{
++	struct grid_cell	gc, defaults;
++
++	if (x < 0 || y < 0 || x >= (int)c->tty.sx || y >= (int)c->tty.sy)
++		return;
++
++	memcpy(&gc, style, sizeof gc);
++	screen_redraw_border_set(w, NULL, pane_lines, cell_type, &gc);
++	memcpy(&defaults, &grid_default_cell, sizeof defaults);
++
++	tty_attributes(&c->tty, &gc, &defaults, NULL, NULL);
++	tty_cursor(&c->tty, (u_int)x, (u_int)y);
++	tty_cell(&c->tty, &gc, &defaults, NULL, NULL);
++}
++
++static void
++animation_paint_pane_border(struct client *c, struct window *w, int active,
++    int lx, int ly, int lw, int lh)
++{
++	struct grid_cell	 style;
++	struct format_tree	*ft;
++	enum pane_lines	 pane_lines;
++	int		 top = ly - 1, bot = ly + lh;
++	int		 left = lx - 1, right = lx + lw;
++	int		 px, py;
++
++	if (lw <= 0 || lh <= 0)
++		return;
++	if (c->session == NULL || c->session->curw == NULL)
++		return;
++
++	pane_lines = options_get_number(w->options, "pane-border-lines");
++
++	memcpy(&style, &grid_default_cell, sizeof style);
++	ft = format_create_defaults(NULL, c, c->session, c->session->curw,
++	    NULL);
++	style_add(&style, w->options,
++	    active ? "pane-active-border-style" : "pane-border-style", ft);
++	format_free(ft);
++
++	for (px = lx; px < lx + lw; px++) {
++		animation_paint_border_cell(c, w, pane_lines, &style,
++		    CELL_LEFTRIGHT, px, top);
++		animation_paint_border_cell(c, w, pane_lines, &style,
++		    CELL_LEFTRIGHT, px, bot);
++	}
++	for (py = ly; py < ly + lh; py++) {
++		animation_paint_border_cell(c, w, pane_lines, &style,
++		    CELL_TOPBOTTOM, left, py);
++		animation_paint_border_cell(c, w, pane_lines, &style,
++		    CELL_TOPBOTTOM, right, py);
++	}
++	animation_paint_border_cell(c, w, pane_lines, &style, CELL_TOPLEFT,
++	    left, top);
++	animation_paint_border_cell(c, w, pane_lines, &style, CELL_TOPRIGHT,
++	    right, top);
++	animation_paint_border_cell(c, w, pane_lines, &style, CELL_BOTTOMLEFT,
++	    left, bot);
++	animation_paint_border_cell(c, w, pane_lines, &style, CELL_BOTTOMRIGHT,
++	    right, bot);
++}
++
++void
++animation_pane_draw(struct client *c, struct animation *a, double t)
++{
++	struct pane_anim	*pa;
++	struct grid_cell	 fill, defaults;
++	struct window_pane	*wp_live;
++	int			 lx, ly, lw, lh;
++	int			 vy;
++	size_t			 i;
++
++	(void)defaults;
++
++	{
++		struct grid_cell	cell;
++		struct window_pane	*wp;
++		memcpy(&cell, &grid_default_cell, sizeof cell);
++		wp = (a->pl_window != NULL) ? a->pl_window->active : NULL;
++		if (wp != NULL)
++			tty_default_colours(&cell, wp);
++		memcpy(&fill, &cell, sizeof fill);
++		for (vy = a->pane_y0; vy < (int)(a->pane_y0 + a->pane_h);
++		    vy++) {
++			tty_attributes(&c->tty, &fill, &fill,
++			    wp ? &wp->palette : NULL, NULL);
++			tty_cursor(&c->tty, a->pane_x0, (u_int)vy);
++			tty_repeat_space(&c->tty, a->pane_w);
++		}
++	}
++
++	for (i = 0; i < a->pl_n; i++) {
++		struct window_pane	*wp_b;
++
++		pa = &a->pl_panes[i];
++		if (pa->backdrop == NULL)
++			continue;
++		wp_b = animation_find_pane(a->pl_window, pa->pane_id);
++		if (wp_b == NULL)
++			continue;
++		animation_paint_pane_clipped(c, pa->backdrop,
++		    &pa->backdrop_palette, (int)wp_b->xoff, (int)wp_b->yoff,
++		    (int)wp_b->sx, (int)wp_b->sy);
++	}
++
++	{
++		int	active_id = -1;
++		size_t	pass;
++
++		if (a->pl_window != NULL && a->pl_window->active != NULL)
++			active_id = (int)a->pl_window->active->id;
++
++		for (pass = 0; pass < 2; pass++) {
++			for (i = 0; i < a->pl_n; i++) {
++				pa = &a->pl_panes[i];
++				if (pass == 0 && pa->pane_id == active_id)
++					continue;
++				if (pass == 1 && pa->pane_id != active_id)
++					continue;
++				if (pa->phase == PANE_RESIZE &&
++				    pa->src_x == pa->tgt_x &&
++				    pa->src_y == pa->tgt_y &&
++				    pa->src_w == pa->tgt_w &&
++				    pa->src_h == pa->tgt_h)
++					continue;
++
++				lx = (int)lround(pa->src_x +
++				    t * (pa->tgt_x - pa->src_x));
++				ly = (int)lround(pa->src_y +
++				    t * (pa->tgt_y - pa->src_y));
++				lw = (int)lround(pa->src_w +
++				    t * (pa->tgt_w - pa->src_w));
++				lh = (int)lround(pa->src_h +
++				    t * (pa->tgt_h - pa->src_h));
++
++				if (c->session != NULL &&
++				    options_get_number(c->session->options,
++				    "animation-pane-borders"))
++					animation_paint_pane_border(c,
++					    a->pl_window,
++					    pa->pane_id == active_id,
++					    lx, ly, lw, lh);
++
++				if (pa->phase == PANE_DYING) {
++					animation_paint_pane_clipped(c,
++					    pa->snapshot,
++					    &pa->snapshot_palette,
++					    lx, ly, lw, lh);
++				} else {
++					struct screen	*s_use = NULL;
++					struct colour_palette *pal_use = NULL;
++
++					wp_live = animation_find_pane(
++					    a->pl_window, pa->pane_id);
++					if (wp_live != NULL &&
++					    wp_live->screen != NULL) {
++						s_use = wp_live->screen;
++						pal_use = &wp_live->palette;
++					}
++					if (s_use == NULL &&
++					    pa->snapshot != NULL) {
++						s_use = pa->snapshot;
++						pal_use = &pa->snapshot_palette;
++					}
++					if (s_use == NULL)
++						continue;
++					animation_paint_pane_clipped(c,
++					    s_use, pal_use, lx, ly, lw, lh);
++				}
++			}
++		}
++	}
++}
++
++void
++animation_pane_free(struct animation *a)
++{
++	size_t	i;
++
++	for (i = 0; i < a->pl_n; i++) {
++		if (a->pl_panes[i].snapshot != NULL) {
++			screen_free(a->pl_panes[i].snapshot);
++			free(a->pl_panes[i].snapshot);
++		}
++		if (a->pl_panes[i].backdrop != NULL) {
++			screen_free(a->pl_panes[i].backdrop);
++			free(a->pl_panes[i].backdrop);
++		}
++	}
++	free(a->pl_panes);
++}
++
++void
++animation_window_pane_layout_begin(struct window *w,
++    struct window_pane *dying_wp)
++{
++	struct client	*c;
++
++	TAILQ_FOREACH(c, &clients, entry) {
++		if (c->session == NULL || c->session->curw == NULL)
++			continue;
++		if (c->session->curw->window != w)
++			continue;
++		animation_begin_pane_layout(c, w, dying_wp);
++	}
++}
++
++void
++animation_window_pane_layout_commit(struct window *w)
++{
++	struct client	*c;
++
++	TAILQ_FOREACH(c, &clients, entry) {
++		if (c->session == NULL || c->session->curw == NULL)
++			continue;
++		if (c->session->curw->window != w)
++			continue;
++		animation_commit_pane_layout(c, w);
++	}
++}
++
++void
++animation_capture_dying_pane(__unused struct window_pane *wp)
++{
++}
++
++/* ---- alt-screen takeover ---- */
++
++static void
++animation_begin_alt_screen_one(struct client *c, struct window_pane *wp,
++    struct screen *snap, int entering)
++{
++	struct animation	*a;
++	struct pane_anim	*pa;
++	struct timeval		 tv;
++
++	if (c == NULL || c->session == NULL || wp == NULL || snap == NULL)
++		goto drop;
++	if (!options_get_number(c->session->options, "animation-enable"))
++		goto drop;
++	if (!options_get_number(c->session->options, "animation-alt-screen"))
++		goto drop;
++	if (c->tty.sx == 0 || c->tty.sy == 0)
++		goto drop;
++	if (c->overlay_draw != NULL && c->animation == NULL)
++		goto drop;
++	if (c->animation != NULL)
++		goto drop;
++	if (wp->sx == 0 || wp->sy == 0)
++		goto drop;
++
++	a = xcalloc(1, sizeof *a);
++	a->client = c;
++	a->kind = ANIM_PANE_LAYOUT;
++	a->easing = animation_easing_lookup(c->session);
++	a->duration_ms = options_get_number(c->session->options,
++	    "animation-pane-duration");
++	a->frame_interval_ms = options_get_number(c->session->options,
++	    "animation-frame-interval");
++	a->sx = c->tty.sx;
++	a->sy = c->tty.sy;
++	a->pane_y0 = wp->yoff;
++	a->pane_h = wp->sy;
++	a->pane_x0 = wp->xoff;
++	a->pane_w = wp->sx;
++	a->pl_window = wp->window;
++	a->pl_n = 1;
++	a->pl_panes = xcalloc(1, sizeof *a->pl_panes);
++	pa = &a->pl_panes[0];
++	pa->pane_id = wp->id;
++
++	if (entering) {
++		pa->phase = PANE_BORN;
++		pa->src_x = wp->xoff + wp->sx / 2;
++		pa->src_y = wp->yoff + wp->sy / 2;
++		pa->src_w = 0;
++		pa->src_h = 0;
++		pa->tgt_x = wp->xoff;
++		pa->tgt_y = wp->yoff;
++		pa->tgt_w = wp->sx;
++		pa->tgt_h = wp->sy;
++		pa->backdrop = snap;
++		memcpy(&pa->backdrop_palette, &wp->palette,
++		    sizeof pa->backdrop_palette);
++	} else {
++		pa->phase = PANE_DYING;
++		pa->src_x = wp->xoff;
++		pa->src_y = wp->yoff;
++		pa->src_w = wp->sx;
++		pa->src_h = wp->sy;
++		pa->tgt_x = wp->xoff + wp->sx / 2;
++		pa->tgt_y = wp->yoff + wp->sy / 2;
++		pa->tgt_w = 0;
++		pa->tgt_h = 0;
++		pa->snapshot = snap;
++		memcpy(&pa->snapshot_palette, &wp->palette,
++		    sizeof pa->snapshot_palette);
++		if (wp->screen != NULL) {
++			pa->backdrop = xcalloc(1, sizeof *pa->backdrop);
++			animation_clone_screen(pa->backdrop, wp->screen);
++			memcpy(&pa->backdrop_palette, &wp->palette,
++			    sizeof pa->backdrop_palette);
++		}
++	}
++
++	a->start_ms = get_timer();
++	a->last_ms = a->start_ms;
++	c->animation = a;
++
++	server_client_set_overlay(c, 0, animation_check_cb, NULL,
++	    animation_draw_cb, animation_key_cb, animation_free_cb,
++	    animation_resize_cb, a);
++
++	evtimer_set(&c->animation_timer, animation_frame_cb, c);
++	tv.tv_sec = 0;
++	tv.tv_usec = (long)a->frame_interval_ms * 1000L;
++	evtimer_add(&c->animation_timer, &tv);
++	return;
++
++drop:
++	if (snap != NULL) {
++		screen_free(snap);
++		free(snap);
++	}
++}
++
++static void
++animation_alt_screen_broadcast(struct window_pane *wp, struct screen *snap,
++    int entering)
++{
++	struct client	*c;
++	int		 placed = 0;
++
++	if (wp == NULL || wp->window == NULL || snap == NULL) {
++		if (snap != NULL) {
++			screen_free(snap);
++			free(snap);
++		}
++		return;
++	}
++
++	TAILQ_FOREACH(c, &clients, entry) {
++		struct screen	*per;
++
++		if (c->session == NULL || c->session->curw == NULL)
++			continue;
++		if (c->session->curw->window != wp->window)
++			continue;
++
++		if (!placed) {
++			per = snap;
++			placed = 1;
++		} else {
++			per = xcalloc(1, sizeof *per);
++			animation_clone_screen(per, snap);
++		}
++		animation_begin_alt_screen_one(c, wp, per, entering);
++	}
++
++	if (!placed) {
++		screen_free(snap);
++		free(snap);
++	}
++}
++
++void
++animation_alt_screen_enter(struct window_pane *wp, struct screen *snap)
++{
++	animation_alt_screen_broadcast(wp, snap, 1);
++}
++
++void
++animation_alt_screen_exit(struct window_pane *wp, struct screen *snap)
++{
++	animation_alt_screen_broadcast(wp, snap, 0);
++}
+diff --git a/animation-scroll.c b/animation-scroll.c
+new file mode 100644
+index 00000000..a157969f
+--- /dev/null
++++ b/animation-scroll.c
+@@ -0,0 +1,155 @@
++/* $OpenBSD$ */
++
++/* Copy-mode scroll animation (ANIM_SCROLL). */
++
++#include <sys/types.h>
++
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "tmux.h"
++#include "animation-internal.h"
++
++void
++animation_begin_scroll(struct client *c, struct window_pane *wp,
++    struct screen *src, int old_oy, int new_oy)
++{
++	struct animation	*a;
++	struct timeval		 tv;
++	u_int			 hsize, snap_h, snap_start;
++	int			 max_oy, min_oy;
++
++	if (c == NULL || c->session == NULL || wp == NULL || src == NULL)
++		return;
++	if (old_oy == new_oy)
++		return;
++	if (!options_get_number(c->session->options, "animation-enable"))
++		return;
++	if (!options_get_number(c->session->options, "animation-scroll"))
++		return;
++	if (c->tty.sx == 0 || c->tty.sy == 0)
++		return;
++	if (c->overlay_draw != NULL && c->animation == NULL)
++		return;
++
++	/*
++	 * In-flight scroll: replace old_oy with the current visual oy so the
++	 * new animation continues from where the eye is, with no snap-back.
++	 */
++	if (c->animation != NULL && c->animation->kind == ANIM_SCROLL) {
++		struct animation	*prev = c->animation;
++		double			 t = 0, cur_off, visual_oy;
++
++		if (prev->duration_ms > 0) {
++			uint64_t now = get_timer();
++			t = (double)(now - prev->start_ms) /
++			    (double)prev->duration_ms;
++		}
++		if (t < 0) t = 0;
++		if (t > 1) t = 1;
++		if (prev->easing == ANIM_EASE_IN_OUT)
++			t = animation_ease_cubic_in_out(t);
++		cur_off = prev->scroll_src_off + t *
++		    (prev->scroll_tgt_off - prev->scroll_src_off);
++		visual_oy = (double)prev->scroll_snap_max_oy - cur_off;
++		old_oy = (int)lround(visual_oy);
++		animation_cancel(c);
++	} else if (c->animation != NULL) {
++		animation_cancel(c);
++	}
++	if (wp->sx == 0 || wp->sy == 0)
++		return;
++
++	hsize = screen_hsize(src);
++	max_oy = old_oy > new_oy ? old_oy : new_oy;
++	min_oy = old_oy < new_oy ? old_oy : new_oy;
++	if (max_oy < 0 || (u_int)max_oy > hsize)
++		return;
++
++	snap_h = wp->sy + (u_int)(max_oy - min_oy);
++	snap_start = hsize - (u_int)max_oy;
++
++	a = xcalloc(1, sizeof *a);
++	a->client = c;
++	a->kind = ANIM_SCROLL;
++	a->easing = ANIM_EASE_IN_OUT;
++	a->duration_ms = options_get_number(c->session->options,
++	    "animation-scroll-duration");
++	a->frame_interval_ms = options_get_number(c->session->options,
++	    "animation-frame-interval");
++	a->sx = c->tty.sx;
++	a->sy = c->tty.sy;
++	a->pane_x0 = wp->xoff;
++	a->pane_w = wp->sx;
++	a->pane_y0 = wp->yoff;
++	a->pane_h = wp->sy;
++
++	a->scroll_snap = xcalloc(1, sizeof *a->scroll_snap);
++	screen_init(a->scroll_snap, wp->sx, snap_h, 0);
++	grid_duplicate_lines(a->scroll_snap->grid, 0, src->grid, snap_start,
++	    snap_h);
++	memcpy(&a->scroll_palette, &wp->palette, sizeof a->scroll_palette);
++
++	a->scroll_src_off = (double)(max_oy - old_oy);
++	a->scroll_tgt_off = (double)(max_oy - new_oy);
++	a->scroll_snap_max_oy = max_oy;
++
++	a->start_ms = get_timer();
++	a->last_ms = a->start_ms;
++	c->animation = a;
++
++	server_client_set_overlay(c, 0, animation_check_cb, NULL,
++	    animation_draw_cb, animation_key_cb, animation_free_cb,
++	    animation_resize_cb, a);
++
++	evtimer_set(&c->animation_timer, animation_frame_cb, c);
++	tv.tv_sec = 0;
++	tv.tv_usec = (long)a->frame_interval_ms * 1000L;
++	evtimer_add(&c->animation_timer, &tv);
++}
++
++void
++animation_scroll_draw(struct client *c, struct animation *a)
++{
++	double			 t, off;
++	struct grid_cell	 defaults;
++	int			 row_off;
++	u_int			 y;
++
++	if (a->duration_ms == 0)
++		t = 1;
++	else {
++		uint64_t now = get_timer();
++		t = (double)(now - a->start_ms) / (double)a->duration_ms;
++	}
++	if (t < 0) t = 0;
++	if (t > 1) t = 1;
++	if (a->easing == ANIM_EASE_IN_OUT)
++		t = animation_ease_cubic_in_out(t);
++
++	off = a->scroll_src_off + t *
++	    (a->scroll_tgt_off - a->scroll_src_off);
++	row_off = (int)lround(off);
++	memcpy(&defaults, &grid_default_cell, sizeof defaults);
++
++	for (y = 0; y < a->pane_h; y++) {
++		int src_y = row_off + (int)y;
++		if (src_y < 0 ||
++		    src_y >= (int)screen_size_y(a->scroll_snap))
++			continue;
++		tty_draw_line(&c->tty, a->scroll_snap, 0,
++		    (u_int)src_y, a->pane_w,
++		    a->pane_x0, a->pane_y0 + y,
++		    &defaults, &a->scroll_palette);
++	}
++}
++
++void
++animation_scroll_free(struct animation *a)
++{
++	if (a->scroll_snap != NULL) {
++		screen_free(a->scroll_snap);
++		free(a->scroll_snap);
++	}
++}
+diff --git a/animation-window.c b/animation-window.c
+new file mode 100644
+index 00000000..144933c9
+--- /dev/null
++++ b/animation-window.c
+@@ -0,0 +1,408 @@
++/* $OpenBSD$ */
++
++/* Window-switch slide animation (ANIM_SLIDE_WINDOW). */
++
++#include <sys/types.h>
++
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "tmux.h"
++#include "animation-internal.h"
++
++static void	animation_paint_window(struct client *, struct window *, int,
++		    u_int, u_int, u_int);
++static struct window_pane *animation_window_default_cell(struct window *,
++		    struct grid_cell *);
++static void	animation_scan_status(struct client *, struct animation *);
++static void	animation_paint_status_copy_cell(struct client *, u_int, u_int,
++		    u_int, u_int);
++static void	animation_paint_status_cell(struct client *, u_int, u_int,
++		    u_int, u_int, const struct grid_cell *);
++static void	animation_draw_status(struct client *, struct animation *,
++		    double);
 +
 +void
 +animation_begin_window_switch(struct client *c, struct winlink *src,
@@ -214,6 +1957,8 @@ index 00000000..3cd22311
 +		}
 +		a->pane_y0 = y0;
 +		a->pane_h = y1 - y0;
++		a->pane_x0 = 0;
++		a->pane_w = a->sx;
 +	}
 +
 +	a->target_pos = 0;
@@ -274,43 +2019,6 @@ index 00000000..3cd22311
 +	animation_scan_status(c, a);
 +}
 +
-+void
-+animation_cancel(struct client *c)
-+{
-+	if (c == NULL || c->animation == NULL)
-+		return;
-+	if (event_initialized(&c->animation_timer))
-+		evtimer_del(&c->animation_timer);
-+	server_client_clear_overlay(c);
-+}
-+
-+int
-+animation_active(struct client *c)
-+{
-+	return (c != NULL && c->animation != NULL);
-+}
-+
-+static struct visible_ranges *
-+animation_check_cb(struct client *c, void *data, u_int px, u_int py, u_int nx)
-+{
-+	struct animation	*a = data;
-+	struct visible_ranges	*r = &a->vis;
-+
-+	(void)c;
-+
-+	server_client_ensure_ranges(r, 1);
-+	r->used = 1;
-+
-+	if (py < a->pane_y0 || py >= a->pane_y0 + a->pane_h) {
-+		r->ranges[0].px = px;
-+		r->ranges[0].nx = nx;
-+	} else {
-+		r->ranges[0].px = 0;
-+		r->ranges[0].nx = 0;
-+	}
-+	return (r);
-+}
-+
 +static void
 +animation_paint_window(struct client *c, struct window *w, int dx,
 +    u_int view_w, u_int view_y0, u_int view_h)
@@ -361,7 +2069,6 @@ index 00000000..3cd22311
 +	return (wp);
 +}
 +
-+/* Locate src/tgt window tab ranges in the current status entries. */
 +static void
 +animation_scan_status(struct client *c, struct animation *a)
 +{
@@ -467,11 +2174,6 @@ index 00000000..3cd22311
 +	    ((double)a->tgt_start - a->src_start);
 +	lerp_x = (int)lround(lstart);
 +
-+	/*
-+	 * Inactive sample taken from a column that is neither under the
-+	 * moving highlight nor at tgt's natural highlight - this prevents
-+	 * sampling our own paint output on a previous frame.
-+	 */
 +	{
 +		u_int imid = a->src_start + (a->src_end - a->src_start) / 2;
 +		if ((int)imid >= lerp_x && (int)imid < lerp_x + lerp_w)
@@ -480,7 +2182,6 @@ index 00000000..3cd22311
 +		    &inactive_style);
 +	}
 +
-+	/* Neutralize tgt's natural highlight where the lerp isn't covering. */
 +	for (x = a->tgt_start; x < a->tgt_end; x++) {
 +		if (x >= lerp_x && x < lerp_x + lerp_w)
 +			continue;
@@ -488,7 +2189,6 @@ index 00000000..3cd22311
 +		    (u_int)x, (u_int)ty, &inactive_style);
 +	}
 +
-+	/* Copy tgt's styled cells, in order, to the lerp position. */
 +	for (i = 0; i < lerp_w; i++) {
 +		int dst_x = lerp_x + i;
 +		int src_col = a->tgt_start + i;
@@ -502,59 +2202,22 @@ index 00000000..3cd22311
 +	}
 +}
 +
-+static void
-+animation_draw_cb(struct client *c, void *data,
-+    struct screen_redraw_ctx *rctx)
++void
++animation_window_draw(struct client *c, struct animation *a)
 +{
-+	struct animation	*a = data;
 +	int			 src_dx, tgt_dx;
-+	overlay_check_cb	 saved_check;
-+	void			*saved_data;
 +	struct window_pane	*src_wp, *tgt_wp;
 +	struct grid_cell	 src_cell, tgt_cell;
 +	int			 src_l, src_r, tgt_l, tgt_r;
 +	u_int			 vy;
-+
-+	(void)rctx;
-+
-+	if (a->kind == ANIM_PANE_LAYOUT) {
-+		double t;
-+		if (a->duration_ms == 0)
-+			t = 1;
-+		else {
-+			uint64_t now = get_timer();
-+			t = (double)(now - a->start_ms) /
-+			    (double)a->duration_ms;
-+		}
-+		if (t < 0) t = 0;
-+		if (t > 1) t = 1;
-+		saved_check = c->overlay_check;
-+		saved_data = c->overlay_data;
-+		c->overlay_check = NULL;
-+		c->overlay_data = NULL;
-+		animation_pane_draw(c, a, t);
-+		c->overlay_check = saved_check;
-+		c->overlay_data = saved_data;
-+		return;
-+	}
 +
 +	if (a->src_wl == NULL || a->tgt_wl == NULL)
 +		return;
 +	if (a->src_wl->window == NULL || a->tgt_wl->window == NULL)
 +		return;
 +
-+	/*
-+	 * pos lerps from sx*axis toward 0. axis = +1 makes tgt enter from
-+	 * the right and src exit to the left; axis = -1 reverses both.
-+	 */
 +	tgt_dx = (int)lround(a->pos);
 +	src_dx = (int)lround(a->pos - (double)a->sx * a->axis);
-+
-+	/* Suppress our own visibility report during nested paint calls. */
-+	saved_check = c->overlay_check;
-+	saved_data = c->overlay_data;
-+	c->overlay_check = NULL;
-+	c->overlay_data = NULL;
 +
 +	src_wp = animation_window_default_cell(a->src_wl->window, &src_cell);
 +	tgt_wp = animation_window_default_cell(a->tgt_wl->window, &tgt_cell);
@@ -594,39 +2257,179 @@ index 00000000..3cd22311
 +		if (t > 1) t = 1;
 +		animation_draw_status(c, a, t);
 +	}
++}
++
++void
++animation_window_free(__unused struct animation *a)
++{
++}
+diff --git a/animation.c b/animation.c
+new file mode 100644
+index 00000000..7c98eaea
+--- /dev/null
++++ b/animation.c
+@@ -0,0 +1,286 @@
++/* $OpenBSD$ */
++
++/*
++ * Animation core: timer loop, easing, overlay callbacks, and dispatch to
++ * per-kind draw/free functions implemented in animation-window.c,
++ * animation-pane.c, and animation-scroll.c.
++ */
++
++#include <sys/types.h>
++
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "tmux.h"
++#include "animation-internal.h"
++
++static void	animation_step_smoothdamp(struct animation *, double);
++static void	animation_step_linear(struct animation *, uint64_t);
++static void	animation_step_ease_in_out(struct animation *, uint64_t);
++static int	animation_is_done(const struct animation *, uint64_t);
++
++enum animation_easing
++animation_easing_lookup(struct session *s)
++{
++	int	n = options_get_number(s->options, "animation-easing");
++
++	switch (n) {
++	case 0: return (ANIM_EASE_SMOOTHDAMP);
++	case 1: return (ANIM_EASE_LINEAR);
++	case 2: return (ANIM_EASE_IN_OUT);
++	}
++	return (ANIM_EASE_SMOOTHDAMP);
++}
++
++void
++animation_cancel(struct client *c)
++{
++	if (c == NULL || c->animation == NULL)
++		return;
++	if (event_initialized(&c->animation_timer))
++		evtimer_del(&c->animation_timer);
++	server_client_clear_overlay(c);
++}
++
++int
++animation_active(struct client *c)
++{
++	return (c != NULL && c->animation != NULL);
++}
++
++struct visible_ranges *
++animation_check_cb(struct client *c, void *data, u_int px, u_int py, u_int nx)
++{
++	struct animation	*a = data;
++	struct visible_ranges	*r = &a->vis;
++	u_int			 row_l = px, row_r = px + nx;
++	u_int			 cov_l, cov_r;
++
++	(void)c;
++
++	server_client_ensure_ranges(r, 2);
++	r->used = 0;
++
++	if (py < a->pane_y0 || py >= a->pane_y0 + a->pane_h) {
++		r->ranges[r->used].px = px;
++		r->ranges[r->used].nx = nx;
++		r->used = 1;
++		return (r);
++	}
++
++	cov_l = a->pane_x0;
++	cov_r = a->pane_x0 + a->pane_w;
++
++	if (row_l < cov_l) {
++		u_int end = row_r < cov_l ? row_r : cov_l;
++		r->ranges[r->used].px = row_l;
++		r->ranges[r->used].nx = end - row_l;
++		r->used++;
++	}
++	if (row_r > cov_r) {
++		u_int start = row_l > cov_r ? row_l : cov_r;
++		r->ranges[r->used].px = start;
++		r->ranges[r->used].nx = row_r - start;
++		r->used++;
++	}
++	return (r);
++}
++
++void
++animation_draw_cb(struct client *c, void *data,
++    __unused struct screen_redraw_ctx *rctx)
++{
++	struct animation	*a = data;
++	overlay_check_cb	 saved_check;
++	void			*saved_data;
++
++	saved_check = c->overlay_check;
++	saved_data = c->overlay_data;
++	c->overlay_check = NULL;
++	c->overlay_data = NULL;
++
++	switch (a->kind) {
++	case ANIM_PANE_LAYOUT: {
++		double t;
++		if (a->duration_ms == 0)
++			t = 1;
++		else {
++			uint64_t now = get_timer();
++			t = (double)(now - a->start_ms) /
++			    (double)a->duration_ms;
++		}
++		if (t < 0) t = 0;
++		if (t > 1) t = 1;
++		animation_pane_draw(c, a, t);
++		break;
++	}
++	case ANIM_SCROLL:
++		animation_scroll_draw(c, a);
++		break;
++	case ANIM_SLIDE_WINDOW:
++		animation_window_draw(c, a);
++		break;
++	}
 +
 +	c->overlay_check = saved_check;
 +	c->overlay_data = saved_data;
 +}
 +
-+/* Passthrough: stay alive, let the key reach normal dispatch. */
-+static int
++int
 +animation_key_cb(__unused struct client *c, __unused void *data,
 +    __unused struct key_event *event)
 +{
 +	return (2);
 +}
 +
-+static void
++void
 +animation_free_cb(struct client *c, void *data)
 +{
 +	struct animation	*a = data;
-+	size_t			 i;
 +
 +	if (c->animation == a)
 +		c->animation = NULL;
-+	for (i = 0; i < a->pl_n; i++) {
-+		if (a->pl_panes[i].snapshot != NULL) {
-+			screen_free(a->pl_panes[i].snapshot);
-+			free(a->pl_panes[i].snapshot);
-+		}
++
++	switch (a->kind) {
++	case ANIM_PANE_LAYOUT:
++		animation_pane_free(a);
++		break;
++	case ANIM_SCROLL:
++		animation_scroll_free(a);
++		break;
++	case ANIM_SLIDE_WINDOW:
++		animation_window_free(a);
++		break;
 +	}
-+	free(a->pl_panes);
++
 +	free(a->vis.ranges);
 +	free(a);
 +}
 +
-+static void
++void
 +animation_resize_cb(struct client *c, __unused void *data)
 +{
 +	animation_cancel(c);
@@ -663,7 +2466,7 @@ index 00000000..3cd22311
 +	a->pos = a->start_pos + t * (a->target_pos - a->start_pos);
 +}
 +
-+static double
++double
 +animation_ease_cubic_in_out(double t)
 +{
 +	if (t < 0.5)
@@ -694,7 +2497,7 @@ index 00000000..3cd22311
 +	return (now - a->start_ms >= a->duration_ms);
 +}
 +
-+static void
++void
 +animation_frame_cb(__unused int fd, __unused short ev, void *arg)
 +{
 +	struct client		*c = arg;
@@ -711,7 +2514,7 @@ index 00000000..3cd22311
 +	if (dt_ms < 0) dt_ms = 0;
 +	a->last_ms = now;
 +
-+	if (a->kind == ANIM_PANE_LAYOUT)
++	if (a->kind == ANIM_PANE_LAYOUT || a->kind == ANIM_SCROLL)
 +		goto check_done;
 +
 +	switch (a->easing) {
@@ -739,9 +2542,7 @@ index 00000000..3cd22311
 +	evtimer_add(&c->animation_timer, &tv);
 +}
 +
-+/* ---- pane layout animations ---- */
-+
-+static void
++void
 +animation_clone_screen(struct screen *dst, struct screen *src)
 +{
 +	struct screen_write_ctx	ctx;
@@ -753,367 +2554,6 @@ index 00000000..3cd22311
 +	screen_write_cursormove(&ctx, 0, 0, 0);
 +	screen_write_fast_copy(&ctx, src, 0, 0, sx, sy);
 +	screen_write_stop(&ctx);
-+}
-+
-+static void
-+animation_free_capture(struct client *c)
-+{
-+	struct pane_layout_capture	*cap = c->animation_capture;
-+
-+	if (cap == NULL)
-+		return;
-+	if (cap->dying_snapshot != NULL) {
-+		screen_free(cap->dying_snapshot);
-+		free(cap->dying_snapshot);
-+	}
-+	free(cap->panes);
-+	free(cap);
-+	c->animation_capture = NULL;
-+}
-+
-+void
-+animation_begin_pane_layout(struct client *c, struct window *w,
-+    struct window_pane *dying_wp)
-+{
-+	struct pane_layout_capture	*cap;
-+	struct window_pane		*wp;
-+	size_t				 i;
-+
-+	if (c == NULL || w == NULL || c->session == NULL)
-+		return;
-+	if (!options_get_number(c->session->options, "animation-enable"))
-+		return;
-+	if (!options_get_number(c->session->options, "animation-pane-layout"))
-+		return;
-+	if (c->tty.sx == 0 || c->tty.sy == 0)
-+		return;
-+	if (c->overlay_draw != NULL && c->animation == NULL)
-+		return;
-+
-+	if (c->animation_capture != NULL)
-+		animation_free_capture(c);
-+
-+	cap = xcalloc(1, sizeof *cap);
-+	cap->w = w;
-+	cap->dying_id = (dying_wp != NULL) ? (int)dying_wp->id : -1;
-+
-+	TAILQ_FOREACH(wp, &w->panes, entry)
-+		cap->cap++;
-+	if (cap->cap == 0) {
-+		free(cap);
-+		return;
-+	}
-+	cap->panes = xcalloc(cap->cap, sizeof *cap->panes);
-+
-+	i = 0;
-+	TAILQ_FOREACH(wp, &w->panes, entry) {
-+		struct pane_anim *pa = &cap->panes[i++];
-+		pa->pane_id = wp->id;
-+		pa->src_x = wp->xoff;
-+		pa->src_y = wp->yoff;
-+		pa->src_w = wp->sx;
-+		pa->src_h = wp->sy;
-+	}
-+	cap->n = i;
-+
-+	if (dying_wp != NULL && dying_wp->screen != NULL) {
-+		cap->dying_snapshot = xcalloc(1, sizeof *cap->dying_snapshot);
-+		animation_clone_screen(cap->dying_snapshot, dying_wp->screen);
-+		memcpy(&cap->dying_palette, &dying_wp->palette,
-+		    sizeof cap->dying_palette);
-+	}
-+
-+	c->animation_capture = cap;
-+}
-+
-+static struct pane_anim *
-+animation_capture_find_pane(struct pane_layout_capture *cap, int pane_id)
-+{
-+	size_t	i;
-+	for (i = 0; i < cap->n; i++)
-+		if (cap->panes[i].pane_id == pane_id)
-+			return (&cap->panes[i]);
-+	return (NULL);
-+}
-+
-+void
-+animation_commit_pane_layout(struct client *c, struct window *w)
-+{
-+	struct pane_layout_capture	*cap;
-+	struct window_pane		*wp;
-+	struct animation		*a;
-+	struct timeval			 tv;
-+	struct pane_anim		*pa;
-+	size_t				 i;
-+	int				 dirty = 0;
-+	int				 y0, y1;
-+
-+	if (c == NULL)
-+		return;
-+	cap = c->animation_capture;
-+	if (cap == NULL)
-+		return;
-+	if (cap->w != w || c->animation != NULL) {
-+		animation_free_capture(c);
-+		return;
-+	}
-+
-+	/* Fill tgt for surviving panes; mark dying for those gone. */
-+	for (i = 0; i < cap->n; i++) {
-+		struct window_pane	*found = NULL;
-+		pa = &cap->panes[i];
-+		TAILQ_FOREACH(wp, &w->panes, entry) {
-+			if ((int)wp->id == pa->pane_id) {
-+				found = wp;
-+				break;
-+			}
-+		}
-+		if (found != NULL) {
-+			pa->tgt_x = found->xoff;
-+			pa->tgt_y = found->yoff;
-+			pa->tgt_w = found->sx;
-+			pa->tgt_h = found->sy;
-+			pa->phase = PANE_RESIZE;
-+		} else {
-+			pa->phase = PANE_DYING;
-+			pa->tgt_x = pa->src_x + pa->src_w / 2;
-+			pa->tgt_y = pa->src_y + pa->src_h / 2;
-+			pa->tgt_w = 0;
-+			pa->tgt_h = 0;
-+			if (pa->pane_id == cap->dying_id) {
-+				pa->snapshot = cap->dying_snapshot;
-+				memcpy(&pa->snapshot_palette,
-+				    &cap->dying_palette,
-+				    sizeof pa->snapshot_palette);
-+				cap->dying_snapshot = NULL;
-+			}
-+		}
-+		if (pa->src_x != pa->tgt_x || pa->src_y != pa->tgt_y ||
-+		    pa->src_w != pa->tgt_w || pa->src_h != pa->tgt_h)
-+			dirty = 1;
-+	}
-+
-+	/* Newborn panes: in w but not in capture. */
-+	TAILQ_FOREACH(wp, &w->panes, entry) {
-+		if (animation_capture_find_pane(cap, wp->id) != NULL)
-+			continue;
-+		if (cap->n >= cap->cap) {
-+			cap->cap = cap->cap * 2 + 1;
-+			cap->panes = xreallocarray(cap->panes, cap->cap,
-+			    sizeof *cap->panes);
-+		}
-+		pa = &cap->panes[cap->n++];
-+		memset(pa, 0, sizeof *pa);
-+		pa->pane_id = wp->id;
-+		pa->phase = PANE_BORN;
-+		pa->src_x = wp->xoff + wp->sx / 2;
-+		pa->src_y = wp->yoff + wp->sy / 2;
-+		pa->src_w = 0;
-+		pa->src_h = 0;
-+		pa->tgt_x = wp->xoff;
-+		pa->tgt_y = wp->yoff;
-+		pa->tgt_w = wp->sx;
-+		pa->tgt_h = wp->sy;
-+		dirty = 1;
-+	}
-+
-+	if (!dirty) {
-+		animation_free_capture(c);
-+		return;
-+	}
-+
-+	a = xcalloc(1, sizeof *a);
-+	a->client = c;
-+	a->kind = ANIM_PANE_LAYOUT;
-+	a->easing = animation_easing_lookup(c->session);
-+	a->duration_ms = options_get_number(c->session->options,
-+	    "animation-pane-duration");
-+	a->frame_interval_ms = options_get_number(c->session->options,
-+	    "animation-frame-interval");
-+	a->sx = c->tty.sx;
-+	a->sy = c->tty.sy;
-+
-+	y0 = a->sy;
-+	y1 = 0;
-+	for (i = 0; i < cap->n; i++) {
-+		pa = &cap->panes[i];
-+		if (pa->src_y < y0) y0 = pa->src_y;
-+		if (pa->src_y + pa->src_h > y1) y1 = pa->src_y + pa->src_h;
-+		if (pa->tgt_y < y0) y0 = pa->tgt_y;
-+		if (pa->tgt_y + pa->tgt_h > y1) y1 = pa->tgt_y + pa->tgt_h;
-+	}
-+	if (y1 <= y0) {
-+		free(a);
-+		animation_free_capture(c);
-+		return;
-+	}
-+	a->pane_y0 = (u_int)y0;
-+	a->pane_h = (u_int)(y1 - y0);
-+
-+	a->pl_window = w;
-+	a->pl_panes = cap->panes;
-+	a->pl_n = cap->n;
-+	cap->panes = NULL;
-+	cap->n = 0;
-+
-+	a->start_ms = get_timer();
-+	a->last_ms = a->start_ms;
-+
-+	c->animation = a;
-+
-+	server_client_set_overlay(c, 0, animation_check_cb, NULL,
-+	    animation_draw_cb, animation_key_cb, animation_free_cb,
-+	    animation_resize_cb, a);
-+
-+	evtimer_set(&c->animation_timer, animation_frame_cb, c);
-+	tv.tv_sec = 0;
-+	tv.tv_usec = (long)a->frame_interval_ms * 1000L;
-+	evtimer_add(&c->animation_timer, &tv);
-+
-+	animation_free_capture(c);
-+}
-+
-+static struct window_pane *
-+animation_find_pane(struct window *w, int id)
-+{
-+	struct window_pane	*wp;
-+
-+	if (w == NULL)
-+		return (NULL);
-+	TAILQ_FOREACH(wp, &w->panes, entry) {
-+		if ((int)wp->id == id)
-+			return (wp);
-+	}
-+	return (NULL);
-+}
-+
-+static void
-+animation_paint_pane_clipped(struct client *c, struct screen *s,
-+    struct colour_palette *palette,
-+    int dst_x, int dst_y, int dst_w, int dst_h)
-+{
-+	struct grid_cell	defaults;
-+	u_int			sy, src_sx, src_sy;
-+	int			nx;
-+
-+	if (s == NULL || dst_w <= 0 || dst_h <= 0)
-+		return;
-+	memcpy(&defaults, &grid_default_cell, sizeof defaults);
-+
-+	src_sx = screen_size_x(s);
-+	src_sy = screen_size_y(s);
-+	nx = dst_w;
-+	if (nx > (int)src_sx) nx = (int)src_sx;
-+	if (dst_x + nx > (int)c->tty.sx) nx = (int)c->tty.sx - dst_x;
-+	if (nx <= 0)
-+		return;
-+
-+	for (sy = 0; sy < (u_int)dst_h && sy < src_sy; sy++) {
-+		int vy = dst_y + sy;
-+		if (vy < 0 || vy >= (int)c->tty.sy)
-+			continue;
-+		tty_draw_line(&c->tty, s, 0, sy, (u_int)nx,
-+		    (u_int)dst_x, (u_int)vy, &defaults, palette);
-+	}
-+}
-+
-+static void
-+animation_pane_draw(struct client *c, struct animation *a, double t)
-+{
-+	struct pane_anim	*pa;
-+	struct grid_cell	 fill, defaults;
-+	struct window_pane	*wp_live;
-+	int			 lx, ly, lw, lh;
-+	int			 vy;
-+	size_t			 i;
-+
-+	(void)defaults;
-+
-+	/* Background fill across the union pane area using window default. */
-+	{
-+		struct grid_cell	cell;
-+		struct window_pane	*wp;
-+		memcpy(&cell, &grid_default_cell, sizeof cell);
-+		wp = (a->pl_window != NULL) ? a->pl_window->active : NULL;
-+		if (wp != NULL)
-+			tty_default_colours(&cell, wp);
-+		memcpy(&fill, &cell, sizeof fill);
-+		for (vy = a->pane_y0; vy < (int)(a->pane_y0 + a->pane_h);
-+		    vy++) {
-+			tty_attributes(&c->tty, &fill, &fill,
-+			    wp ? &wp->palette : NULL, NULL);
-+			tty_cursor(&c->tty, 0, (u_int)vy);
-+			tty_repeat_space(&c->tty, a->sx);
-+		}
-+	}
-+
-+	for (i = 0; i < a->pl_n; i++) {
-+		pa = &a->pl_panes[i];
-+		lx = (int)lround(pa->src_x + t * (pa->tgt_x - pa->src_x));
-+		ly = (int)lround(pa->src_y + t * (pa->tgt_y - pa->src_y));
-+		lw = (int)lround(pa->src_w + t * (pa->tgt_w - pa->src_w));
-+		lh = (int)lround(pa->src_h + t * (pa->tgt_h - pa->src_h));
-+
-+		if (pa->phase == PANE_DYING) {
-+			animation_paint_pane_clipped(c, pa->snapshot,
-+			    NULL, lx, ly, lw, lh);
-+		} else {
-+			wp_live = animation_find_pane(a->pl_window,
-+			    pa->pane_id);
-+			if (wp_live == NULL || wp_live->screen == NULL)
-+				continue;
-+			animation_paint_pane_clipped(c, wp_live->screen,
-+			    &wp_live->palette, lx, ly, lw, lh);
-+		}
-+	}
-+}
-+
-+/*
-+ * Begin/commit pane-layout animations for every client whose currently
-+ * displayed window is `w`. Used from non-command paths like
-+ * server_destroy_pane (Ctrl-D shell exit) that don't have a single
-+ * triggering client.
-+ */
-+void
-+animation_window_pane_layout_begin(struct window *w,
-+    struct window_pane *dying_wp)
-+{
-+	struct client	*c;
-+
-+	TAILQ_FOREACH(c, &clients, entry) {
-+		if (c->session == NULL || c->session->curw == NULL)
-+			continue;
-+		if (c->session->curw->window != w)
-+			continue;
-+		animation_begin_pane_layout(c, w, dying_wp);
-+	}
-+}
-+
-+void
-+animation_window_pane_layout_commit(struct window *w)
-+{
-+	struct client	*c;
-+
-+	TAILQ_FOREACH(c, &clients, entry) {
-+		if (c->session == NULL || c->session->curw == NULL)
-+			continue;
-+		if (c->session->curw->window != w)
-+			continue;
-+		animation_commit_pane_layout(c, w);
-+	}
-+}
-+
-+/* Hook used from window_pane_destroy paths to snapshot a dying pane. */
-+void
-+animation_capture_dying_pane(struct window_pane *wp)
-+{
-+	/*
-+	 * Implemented by the command-site hooks for now (cmd-kill-pane.c
-+	 * calls animation_begin_pane_layout(c, w, wp) before destroy).
-+	 * The detour stays as a placeholder so callers can be added later
-+	 * without API churn.
-+	 */
-+	(void)wp;
 +}
 diff --git a/cmd-kill-pane.c b/cmd-kill-pane.c
 index fc3eb1b7..11ea7673 100644
@@ -1128,28 +2568,36 @@ index fc3eb1b7..11ea7673 100644
 +	animation_commit_pane_layout(cmdq_get_client(item), wl->window);
  	return (CMD_RETURN_NORMAL);
  }
+diff --git a/cmd-list-keys.c b/cmd-list-keys.c
+index 405c03c7..d8065259 100644
+--- a/cmd-list-keys.c
++++ b/cmd-list-keys.c
+@@ -35,7 +35,7 @@
+ 	","							\
+ 	"bind-key #{?key_has_repeat,#{?key_repeat,-r,  },} "	\
+ 	"-T #{p|#{key_table_width}:key_table} "			\
+-	"#{p|#{key_string_width}:key_string} "			\
++	"#{p|#{key_string_width}:#{q|a:key_string}} "		\
+ 	"#{key_command}}"
+ 
+ static enum cmd_retval cmd_list_keys_exec(struct cmd *, struct cmdq_item *);
 diff --git a/cmd-resize-pane.c b/cmd-resize-pane.c
-index bae6a691..26e36ccd 100644
+index bae6a691..39b28096 100644
 --- a/cmd-resize-pane.c
 +++ b/cmd-resize-pane.c
-@@ -99,6 +99,8 @@ cmd_resize_pane_exec(struct cmd *self, struct cmdq_item *item)
- 		}
+@@ -80,10 +80,12 @@ cmd_resize_pane_exec(struct cmd *self, struct cmdq_item *item)
+ 		return (cmd_resize_pane_mouse_update(self, item));
+ 
+ 	if (args_has(args, 'Z')) {
++		animation_begin_pane_layout(cmdq_get_client(item), w, NULL);
+ 		if (w->flags & WINDOW_ZOOMED)
+ 			window_unzoom(w, 1);
+ 		else
+ 			window_zoom(wp);
++		animation_commit_pane_layout(cmdq_get_client(item), w);
+ 		server_redraw_window(w);
+ 		return (CMD_RETURN_NORMAL);
  	}
- 
-+	animation_begin_pane_layout(cmdq_get_client(item), w, NULL);
-+
- 	if (args_has(args, 'x')) {
- 		x = args_percentage(args, 'x', 0, INT_MAX, w->sx, &cause);
- 		if (cause != NULL) {
-@@ -139,6 +141,8 @@ cmd_resize_pane_exec(struct cmd *self, struct cmdq_item *item)
- 		layout_resize_pane(wp, LAYOUT_TOPBOTTOM, adjust, 1);
- 	server_redraw_window(wl->window);
- 
-+	animation_commit_pane_layout(cmdq_get_client(item), w);
-+
- 	return (CMD_RETURN_NORMAL);
- }
- 
 diff --git a/cmd-split-window.c b/cmd-split-window.c
 index bee29dc7..695b40fe 100644
 --- a/cmd-split-window.c
@@ -1175,8 +2623,180 @@ index bee29dc7..695b40fe 100644
  	if (input)
  		return (CMD_RETURN_WAIT);
  	return (CMD_RETURN_NORMAL);
+diff --git a/configure.ac b/configure.ac
+index 093d855b..776f77f1 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1,6 +1,6 @@
+ # configure.ac
+ 
+-AC_INIT([tmux], next-3.7)
++AC_INIT([tmux], 3.6b)
+ AC_PREREQ([2.60])
+ 
+ AC_CONFIG_AUX_DIR(etc)
+diff --git a/format.c b/format.c
+index d94c724d..1756c170 100644
+--- a/format.c
++++ b/format.c
+@@ -116,6 +116,7 @@ format_job_cmp(struct format_job *fj1, struct format_job *fj2)
+ #define FORMAT_NOT 0x80000
+ #define FORMAT_NOT_NOT 0x100000
+ #define FORMAT_REPEAT 0x200000
++#define FORMAT_QUOTE_ARGUMENTS 0x400000
+ 
+ /* Limit on recursion. */
+ #define FORMAT_LOOP_LIMIT 100
+@@ -4182,6 +4183,11 @@ found:
+ 		found = format_quote_style(saved);
+ 		free(saved);
+ 	}
++	if (modifiers & FORMAT_QUOTE_ARGUMENTS) {
++		saved = found;
++		found = args_escape(saved);
++		free(saved);
++	}
+ 	return (found);
+ }
+ 
+@@ -5155,6 +5161,8 @@ format_replace(struct format_expand_state *es, const char *key, size_t keylen,
+ 				else if (strchr(fm->argv[0], 'e') != NULL ||
+ 				    strchr(fm->argv[0], 'h') != NULL)
+ 					modifiers |= FORMAT_QUOTE_STYLE;
++				else if (strchr(fm->argv[0], 'a') != NULL)
++					modifiers |= FORMAT_QUOTE_ARGUMENTS;
+ 				break;
+ 			case 'E':
+ 				modifiers |= FORMAT_EXPAND;
+diff --git a/install.sh b/install.sh
+new file mode 100755
+index 00000000..8be04db8
+--- /dev/null
++++ b/install.sh
+@@ -0,0 +1,121 @@
++#!/usr/bin/env bash
++# tmux-animated installer.
++#
++# clones upstream tmux at the version this patch was made against,
++# applies the animation patch, builds, and installs as `tmux-animated`.
++#
++# Usage:
++#   curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/install.sh | bash
++#
++# Override the install prefix:
++#   PREFIX=/opt/local curl ... | bash
++set -euo pipefail
++
++REPO_RAW="https://raw.githubusercontent.com/jonaburg/tmux-animated/animations"
++PATCH_NAME="tmux-animated-next-3.7.patch"
++TMUX_REPO="https://github.com/tmux/tmux.git"
++# The upstream commit the patch was generated against. TODO: Update this when
++# the patch is rebased onto a new upstream tmux.
++TMUX_REF="f43adc36"
++
++PREFIX="${PREFIX:-/usr/local}"
++BIN_NAME="tmux-animated"
++
++WORKDIR="$(mktemp -d -t tmux-animated.XXXXXX)"
++trap 'rm -rf "$WORKDIR"' EXIT
++
++say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
++err() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
++
++
++missing=()
++for cmd in cc make patch git curl pkg-config autoconf automake bison; do
++    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
++done
++
++# libevent and ncurses are libraries, not commands; check via pkg-config if available.
++if command -v pkg-config >/dev/null 2>&1; then
++    pkg-config --exists libevent 2>/dev/null || missing+=("libevent (dev headers)")
++    pkg-config --exists ncurses 2>/dev/null || missing+=("ncurses (dev headers)")
++fi
++
++if [ "${#missing[@]}" -gt 0 ]; then
++    printf '\033[1;31merror:\033[0m missing required tools/libraries: %s\n' "${missing[*]}" >&2
++    echo >&2
++    echo "Install hints:" >&2
++    case "$(uname -s)" in
++        Linux)
++            if [ -r /etc/os-release ]; then . /etc/os-release; fi
++            case "${ID:-}${ID_LIKE:-}" in
++                *debian*|*ubuntu*)
++                    echo "  sudo apt-get install -y build-essential pkg-config autoconf automake libevent-dev libncurses-dev bison patch git curl" >&2
++                    ;;
++                *fedora*|*rhel*|*centos*)
++                    echo "  sudo dnf install -y gcc make patch git curl pkgconf-pkg-config autoconf automake libevent-devel ncurses-devel bison" >&2
++                    ;;
++                *arch*)
++                    echo "  sudo pacman -S --needed base-devel pkgconf autoconf automake libevent ncurses bison patch git curl" >&2
++                    ;;
++                *alpine*)
++                    echo "  sudo apk add build-base pkgconf autoconf automake libevent-dev ncurses-dev bison patch git curl" >&2
++                    ;;
++                *)
++                    echo "  Install: build tools, pkg-config, autoconf, automake, libevent-dev, ncurses-dev, bison" >&2
++                    ;;
++            esac
++            ;;
++        Darwin)
++            echo "  brew install pkg-config autoconf automake libevent ncurses" >&2
++            ;;
++    esac
++    exit 1
++fi
++
++if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
++    export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
++fi
++
++
++say "Cloning tmux at $TMUX_REF"
++git clone --quiet "$TMUX_REPO" "$WORKDIR/tmux"
++cd "$WORKDIR/tmux"
++git checkout --quiet "$TMUX_REF"
++
++say "Downloading patch"
++curl -fsSL "$REPO_RAW/patches/$PATCH_NAME" -o "$WORKDIR/$PATCH_NAME"
++
++say "Applying patch"
++patch -p1 -s < "$WORKDIR/$PATCH_NAME"
++
++
++# Automake canonicalizes program names — hyphens are illegal in variable
++# names, so the *_SOURCES / *_LDADD vars must use underscores even though
++# the bin_PROGRAMS entry can have a hyphen.
++CANON_NAME="${BIN_NAME//-/_}"
++sed -i.bak 's/^bin_PROGRAMS = tmux$/bin_PROGRAMS = '"$BIN_NAME"'/' Makefile.am
++sed -i.bak 's/tmux_SOURCES/'"$CANON_NAME"'_SOURCES/g' Makefile.am
++sed -i.bak 's/tmux_LDADD/'"$CANON_NAME"'_LDADD/g' Makefile.am
++rm -f Makefile.am.bak
++
++
++say "Bootstrapping"
++./autogen.sh >/dev/null
++
++say "Configuring (prefix=$PREFIX)"
++EXTRA_CONFIGURE=""
++if [ "$(uname -s)" = "Darwin" ]; then
++    EXTRA_CONFIGURE="--disable-utf8proc"
++fi
++./configure --prefix="$PREFIX" $EXTRA_CONFIGURE >/dev/null
++
++say "Building"
++make -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" >/dev/null
++
++say "Installing to $PREFIX/bin/$BIN_NAME"
++if [ -w "$PREFIX/bin" ]; then
++    make install >/dev/null
++else
++    sudo make install >/dev/null
++fi
++
++say "Done. Run: $BIN_NAME ($PREFIX/bin/$BIN_NAME)"
 diff --git a/options-table.c b/options-table.c
-index 3bff66b5..e49ccf5f 100644
+index 3bff66b5..b4f98702 100644
 --- a/options-table.c
 +++ b/options-table.c
 @@ -111,6 +111,12 @@ static const char *options_table_allow_passthrough_list[] = {
@@ -1192,7 +2812,7 @@ index 3bff66b5..e49ccf5f 100644
  
  /* Status line format. */
  #define OPTIONS_TABLE_STATUS_FORMAT1 \
-@@ -277,6 +283,79 @@ const struct options_name_map options_other_names[] = {
+@@ -277,6 +283,125 @@ const struct options_name_map options_other_names[] = {
  /* Top-level options. */
  const struct options_table_entry options_table[] = {
  	/* Server options. */
@@ -1260,6 +2880,36 @@ index 3bff66b5..e49ccf5f 100644
 +	  .text = "Animate pane resize, split, and kill."
 +	},
 +
++	{ .name = "animation-pane-borders",
++	  .type = OPTIONS_TABLE_FLAG,
++	  .scope = OPTIONS_TABLE_SESSION,
++	  .default_num = 1,
++	  .text = "Draw pane borders during pane layout animations."
++	},
++
++	{ .name = "animation-scroll",
++	  .type = OPTIONS_TABLE_FLAG,
++	  .scope = OPTIONS_TABLE_SESSION,
++	  .default_num = 1,
++	  .text = "Smooth-scroll copy-mode page up and page down."
++	},
++
++	{ .name = "animation-scroll-duration",
++	  .type = OPTIONS_TABLE_NUMBER,
++	  .scope = OPTIONS_TABLE_SESSION,
++	  .minimum = 0,
++	  .maximum = 5000,
++	  .default_num = 150,
++	  .text = "Duration in ms of copy-mode scroll animations."
++	},
++
++	{ .name = "animation-alt-screen",
++	  .type = OPTIONS_TABLE_FLAG,
++	  .scope = OPTIONS_TABLE_SESSION,
++	  .default_num = 1,
++	  .text = "Animate programs entering and leaving the alternate screen."
++	},
++
 +	{ .name = "animation-pane-duration",
 +	  .type = OPTIONS_TABLE_NUMBER,
 +	  .scope = OPTIONS_TABLE_SESSION,
@@ -1269,9 +2919,514 @@ index 3bff66b5..e49ccf5f 100644
 +	  .text = "Duration in ms of pane layout animations."
 +	},
 +
++	{ .name = "animation-popup",
++	  .type = OPTIONS_TABLE_FLAG,
++	  .scope = OPTIONS_TABLE_SESSION,
++	  .default_num = 1,
++	  .text = "Animate popup open and close (grow/shrink)."
++	},
++
++	{ .name = "animation-popup-duration",
++	  .type = OPTIONS_TABLE_NUMBER,
++	  .scope = OPTIONS_TABLE_SESSION,
++	  .minimum = 0,
++	  .maximum = 5000,
++	  .default_num = 120,
++	  .text = "Duration in ms of popup open/close animations."
++	},
++
  	{ .name = "backspace",
  	  .type = OPTIONS_TABLE_KEY,
  	  .scope = OPTIONS_TABLE_SERVER,
+diff --git a/popup.c b/popup.c
+index cb8dbf06..2dba84d5 100644
+--- a/popup.c
++++ b/popup.c
+@@ -19,6 +19,7 @@
+ #include <sys/types.h>
+ #include <sys/wait.h>
+ 
++#include <math.h>
+ #include <signal.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -73,8 +74,22 @@ struct popup_data {
+ 	u_int			  lx;
+ 	u_int			  ly;
+ 	u_int			  lb;
++
++	int			  anim_active;
++	int			  anim_closing;
++	int			  anim_src_px, anim_src_py, anim_src_sx, anim_src_sy;
++	int			  anim_tgt_px, anim_tgt_py, anim_tgt_sx, anim_tgt_sy;
++	uint64_t		  anim_start_ms;
++	uint64_t		  anim_duration_ms;
++	struct event		  anim_timer;
++	int			  anim_timer_set;
+ };
+ 
++static void	popup_anim_frame_cb(int, short, void *);
++static void	popup_anim_start_close(struct popup_data *);
++static int	popup_anim_bounds(struct popup_data *, u_int *, u_int *,
++		    u_int *, u_int *);
++
+ struct popup_editor {
+ 	char			*path;
+ 	popup_finish_edit_cb	 cb;
+@@ -103,9 +118,196 @@ static const struct menu_item popup_internal_menu_items[] = {
+ 	{ NULL, KEYC_NONE, NULL }
+ };
+ 
++/* Cubic ease-in-out on t in [0,1]. */
++static double
++popup_anim_ease(double t)
++{
++	if (t < 0.5)
++		return (4.0 * t * t * t);
++	t = 2.0 * t - 2.0;
++	return (0.5 * t * t * t + 1.0);
++}
++
++/*
++ * Compute the current on-screen bounds. Returns 1 if any animation is
++ * active (caller will redraw on a timer), 0 if popup is in steady state.
++ */
++static int
++popup_anim_bounds(struct popup_data *pd, u_int *px, u_int *py, u_int *sx,
++    u_int *sy)
++{
++	uint64_t	now;
++	double		t, e;
++	int		cx, cy, cw, ch;
++
++	if (!pd->anim_active) {
++		*px = pd->px;
++		*py = pd->py;
++		*sx = pd->sx;
++		*sy = pd->sy;
++		return (0);
++	}
++
++	now = get_timer();
++	if (pd->anim_duration_ms == 0)
++		t = 1.0;
++	else
++		t = (double)(now - pd->anim_start_ms) /
++		    (double)pd->anim_duration_ms;
++	if (t < 0) t = 0;
++	if (t > 1) t = 1;
++	e = popup_anim_ease(t);
++
++	cx = (int)lround(pd->anim_src_px + e *
++	    (pd->anim_tgt_px - pd->anim_src_px));
++	cy = (int)lround(pd->anim_src_py + e *
++	    (pd->anim_tgt_py - pd->anim_src_py));
++	cw = (int)lround(pd->anim_src_sx + e *
++	    (pd->anim_tgt_sx - pd->anim_src_sx));
++	ch = (int)lround(pd->anim_src_sy + e *
++	    (pd->anim_tgt_sy - pd->anim_src_sy));
++
++	if (cw < 0) cw = 0;
++	if (ch < 0) ch = 0;
++	if (cx < 0) cx = 0;
++	if (cy < 0) cy = 0;
++
++	*px = (u_int)cx;
++	*py = (u_int)cy;
++	*sx = (u_int)cw;
++	*sy = (u_int)ch;
++	return (1);
++}
++
++static void
++popup_anim_start_open(struct popup_data *pd)
++{
++	struct session	*s;
++	struct timeval	 tv;
++	int		 cx, cy;
++
++	if (pd->c == NULL || (s = pd->c->session) == NULL)
++		return;
++	if (!options_get_number(s->options, "animation-enable"))
++		return;
++	if (!options_get_number(s->options, "animation-popup"))
++		return;
++	pd->anim_duration_ms =
++	    options_get_number(s->options, "animation-popup-duration");
++	if (pd->anim_duration_ms == 0)
++		return;
++
++	cx = (int)pd->px + (int)pd->sx / 2;
++	cy = (int)pd->py + (int)pd->sy / 2;
++
++	pd->anim_src_px = cx;
++	pd->anim_src_py = cy;
++	pd->anim_src_sx = 0;
++	pd->anim_src_sy = 0;
++	pd->anim_tgt_px = pd->px;
++	pd->anim_tgt_py = pd->py;
++	pd->anim_tgt_sx = pd->sx;
++	pd->anim_tgt_sy = pd->sy;
++
++	pd->anim_active = 1;
++	pd->anim_closing = 0;
++	pd->anim_start_ms = get_timer();
++
++	evtimer_set(&pd->anim_timer, popup_anim_frame_cb, pd);
++	pd->anim_timer_set = 1;
++	tv.tv_sec = 0;
++	tv.tv_usec = 16 * 1000L;
++	evtimer_add(&pd->anim_timer, &tv);
++}
++
++static void
++popup_anim_start_close(struct popup_data *pd)
++{
++	struct session	*s;
++	struct timeval	 tv;
++	u_int		 cur_px, cur_py, cur_sx, cur_sy;
++	int		 cx, cy;
++
++	if (pd->anim_closing)
++		return;
++	if (pd->c == NULL || (s = pd->c->session) == NULL)
++		goto snap;
++	if (!options_get_number(s->options, "animation-enable"))
++		goto snap;
++	if (!options_get_number(s->options, "animation-popup"))
++		goto snap;
++	pd->anim_duration_ms =
++	    options_get_number(s->options, "animation-popup-duration");
++	if (pd->anim_duration_ms == 0)
++		goto snap;
++
++	popup_anim_bounds(pd, &cur_px, &cur_py, &cur_sx, &cur_sy);
++
++	cx = (int)pd->px + (int)pd->sx / 2;
++	cy = (int)pd->py + (int)pd->sy / 2;
++
++	pd->anim_src_px = (int)cur_px;
++	pd->anim_src_py = (int)cur_py;
++	pd->anim_src_sx = (int)cur_sx;
++	pd->anim_src_sy = (int)cur_sy;
++	pd->anim_tgt_px = cx;
++	pd->anim_tgt_py = cy;
++	pd->anim_tgt_sx = 0;
++	pd->anim_tgt_sy = 0;
++
++	pd->anim_active = 1;
++	pd->anim_closing = 1;
++	pd->anim_start_ms = get_timer();
++
++	if (!pd->anim_timer_set) {
++		evtimer_set(&pd->anim_timer, popup_anim_frame_cb, pd);
++		pd->anim_timer_set = 1;
++	}
++	tv.tv_sec = 0;
++	tv.tv_usec = 16 * 1000L;
++	evtimer_add(&pd->anim_timer, &tv);
++	server_redraw_client(pd->c);
++	return;
++
++snap:
++	server_client_clear_overlay(pd->c);
++}
++
++static void
++popup_anim_frame_cb(__unused int fd, __unused short ev, void *arg)
++{
++	struct popup_data	*pd = arg;
++	uint64_t		 now;
++	struct timeval		 tv;
++
++	if (!pd->anim_active)
++		return;
++
++	now = get_timer();
++	if (now - pd->anim_start_ms >= pd->anim_duration_ms) {
++		int closing = pd->anim_closing;
++		pd->anim_active = 0;
++		pd->anim_closing = 0;
++		if (closing) {
++			server_client_clear_overlay(pd->c);
++			return;
++		}
++		server_redraw_client(pd->c);
++		return;
++	}
++
++	server_redraw_client(pd->c);
++	tv.tv_sec = 0;
++	tv.tv_usec = 16 * 1000L;
++	evtimer_add(&pd->anim_timer, &tv);
++}
++
+ static void
+ popup_free(struct popup_data *pd)
+ {
++	if (pd->anim_timer_set && event_initialized(&pd->anim_timer))
++		evtimer_del(&pd->anim_timer);
++
+ 	server_client_unref(pd->c);
+ 
+ 	if (pd->job != NULL)
+@@ -222,6 +424,9 @@ popup_mode_cb(__unused struct client *c, void *data, u_int *cx, u_int *cy)
+ 	if (pd->md != NULL)
+ 		return (menu_mode_cb(c, pd->md, cx, cy));
+ 
++	if (pd->anim_active)
++		return (NULL);
++
+ 	if (pd->border_lines == BOX_LINES_NONE) {
+ 		*cx = pd->px + pd->s.cx;
+ 		*cy = pd->py + pd->s.cy;
+@@ -281,8 +486,18 @@ popup_check_cb(struct client* c, void *data, u_int px, u_int py, u_int nx)
+ 		return (r);
+ 	}
+ 
+-	server_client_overlay_range(pd->px, pd->py, pd->sx, pd->sy, px, py, nx,
+-	    r);
++	{
++		u_int	apx, apy, asx, asy;
++		popup_anim_bounds(pd, &apx, &apy, &asx, &asy);
++		if (asx == 0 || asy == 0) {
++			server_client_ensure_ranges(r, 1);
++			r->ranges[0].px = px;
++			r->ranges[0].nx = nx;
++			r->used = 1;
++			return (r);
++		}
++		server_client_overlay_range(apx, apy, asx, asy, px, py, nx, r);
++	}
+ 	return (r);
+ }
+ 
+@@ -293,13 +508,25 @@ popup_draw_cb(struct client *c, void *data, struct screen_redraw_ctx *rctx)
+ 	struct tty		*tty = &c->tty;
+ 	struct screen		 s;
+ 	struct screen_write_ctx	 ctx;
+-	u_int			 i, px = pd->px, py = pd->py;
++	u_int			 i, px, py, sx, sy;
+ 	struct colour_palette	*palette = &pd->palette;
+ 	struct grid_cell	 defaults;
+ 
+ 	popup_reapply_styles(pd);
+ 
+-	screen_init(&s, pd->sx, pd->sy, 0);
++	popup_anim_bounds(pd, &px, &py, &sx, &sy);
++	if (sx == 0 || sy == 0) {
++		if (pd->md != NULL) {
++			c->overlay_check = NULL;
++			c->overlay_data = NULL;
++			menu_draw_cb(c, pd->md, rctx);
++		}
++		c->overlay_check = popup_check_cb;
++		c->overlay_data = pd;
++		return;
++	}
++
++	screen_init(&s, sx, sy, 0);
+ 	if (pd->s.hyperlinks != NULL) {
+ 		hyperlinks_free(s.hyperlinks);
+ 		s.hyperlinks = hyperlinks_copy(pd->s.hyperlinks);
+@@ -308,14 +535,34 @@ popup_draw_cb(struct client *c, void *data, struct screen_redraw_ctx *rctx)
+ 	screen_write_clearscreen(&ctx, 8);
+ 
+ 	if (pd->border_lines == BOX_LINES_NONE) {
++		u_int copy_sx = sx, copy_sy = sy;
++		if (copy_sx > pd->sx) copy_sx = pd->sx;
++		if (copy_sy > pd->sy) copy_sy = pd->sy;
+ 		screen_write_cursormove(&ctx, 0, 0, 0);
+-		screen_write_fast_copy(&ctx, &pd->s, 0, 0, pd->sx, pd->sy);
+-	} else if (pd->sx > 2 && pd->sy > 2) {
+-		screen_write_box(&ctx, pd->sx, pd->sy, pd->border_lines,
+-		    &pd->border_cell, pd->title);
+-		screen_write_cursormove(&ctx, 1, 1, 0);
+-		screen_write_fast_copy(&ctx, &pd->s, 0, 0, pd->sx - 2,
+-		    pd->sy - 2);
++		screen_write_fast_copy(&ctx, &pd->s, 0, 0, copy_sx, copy_sy);
++	} else if (sx > 2 && sy > 2) {
++		u_int copy_sx = sx - 2, copy_sy = sy - 2;
++		u_int content_sx = (pd->sx > 2) ? pd->sx - 2 : 0;
++		u_int content_sy = (pd->sy > 2) ? pd->sy - 2 : 0;
++		if (copy_sx > content_sx) copy_sx = content_sx;
++		if (copy_sy > content_sy) copy_sy = content_sy;
++		screen_write_box(&ctx, sx, sy, pd->border_lines,
++		    &pd->border_cell, pd->anim_active ? NULL : pd->title);
++		if (copy_sx > 0 && copy_sy > 0) {
++			screen_write_cursormove(&ctx, 1, 1, 0);
++			screen_write_fast_copy(&ctx, &pd->s, 0, 0,
++			    copy_sx, copy_sy);
++		}
++	} else {
++		struct grid_cell	bgcell;
++		memcpy(&bgcell, &pd->border_cell, sizeof bgcell);
++		screen_write_cursormove(&ctx, 0, 0, 0);
++		for (i = 0; i < sy; i++) {
++			u_int j;
++			screen_write_cursormove(&ctx, 0, i, 0);
++			for (j = 0; j < sx; j++)
++				screen_write_cell(&ctx, &bgcell);
++		}
+ 	}
+ 	screen_write_stop(&ctx);
+ 
+@@ -332,8 +579,8 @@ popup_draw_cb(struct client *c, void *data, struct screen_redraw_ctx *rctx)
+ 		c->overlay_check = NULL;
+ 		c->overlay_data = NULL;
+ 	}
+-	for (i = 0; i < pd->sy; i++) {
+-		tty_draw_line(tty, &s, 0, i, pd->sx, px, py + i, &defaults,
++	for (i = 0; i < sy; i++) {
++		tty_draw_line(tty, &s, 0, i, sx, px, py + i, &defaults,
+ 		    palette);
+ 	}
+ 	screen_free(&s);
+@@ -376,6 +623,12 @@ popup_resize_cb(__unused struct client *c, void *data)
+ 
+ 	if (pd == NULL)
+ 		return;
++	if (pd->anim_active) {
++		if (pd->anim_timer_set && event_initialized(&pd->anim_timer))
++			evtimer_del(&pd->anim_timer);
++		pd->anim_active = 0;
++		pd->anim_closing = 0;
++	}
+ 	if (pd->md != NULL)
+ 		menu_free_cb(c, pd->md);
+ 
+@@ -571,9 +824,10 @@ popup_key_cb(struct client *c, void *data, struct key_event *event)
+ 		if (menu_key_cb(c, pd->md, event) == 1) {
+ 			pd->md = NULL;
+ 			pd->menu = NULL;
+-			if (pd->close)
+-				server_client_clear_overlay(c);
+-			else
++			if (pd->close) {
++				popup_anim_start_close(pd);
++				return (0);
++			} else
+ 				server_redraw_client(c);
+ 		}
+ 		return (0);
+@@ -621,11 +875,15 @@ popup_key_cb(struct client *c, void *data, struct key_event *event)
+ 	}
+ 	if ((((pd->flags & (POPUP_CLOSEEXIT|POPUP_CLOSEEXITZERO)) == 0) ||
+ 	    pd->job == NULL) &&
+-	    (event->key == '\033' || event->key == ('c'|KEYC_CTRL)))
+-		return (1);
++	    (event->key == '\033' || event->key == ('c'|KEYC_CTRL))) {
++		popup_anim_start_close(pd);
++		return (0);
++	}
+ 	if (pd->job == NULL && (pd->flags & POPUP_CLOSEANYKEY) &&
+-	    !KEYC_IS_MOUSE(event->key) && !KEYC_IS_PASTE(event->key))
+-		return (1);
++	    !KEYC_IS_MOUSE(event->key) && !KEYC_IS_PASTE(event->key)) {
++		popup_anim_start_close(pd);
++		return (0);
++	}
+ 	if (pd->job != NULL) {
+ 		if (KEYC_IS_MOUSE(event->key)) {
+ 			/* Must be inside, checked already. */
+@@ -711,7 +969,7 @@ popup_job_complete_cb(struct job *job)
+ 
+ 	if ((pd->flags & POPUP_CLOSEEXIT) ||
+ 	    ((pd->flags & POPUP_CLOSEEXITZERO) && pd->status == 0))
+-		server_client_clear_overlay(pd->c);
++		popup_anim_start_close(pd);
+ }
+ 
+ int
+@@ -874,6 +1132,7 @@ popup_display(int flags, enum box_lines lines, struct cmdq_item *item, u_int px,
+ 
+ 	server_client_set_overlay(c, 0, popup_check_cb, popup_mode_cb,
+ 	    popup_draw_cb, popup_key_cb, popup_free_cb, popup_resize_cb, pd);
++	popup_anim_start_open(pd);
+ 	return (0);
+ }
+ 
+diff --git a/screen-redraw.c b/screen-redraw.c
+index 159c86f8..564ac690 100644
+--- a/screen-redraw.c
++++ b/screen-redraw.c
+@@ -51,7 +51,7 @@ enum screen_redraw_border_type {
+ #define BORDER_MARKERS "  +,.-"
+ 
+ /* Get cell border character. */
+-static void
++void
+ screen_redraw_border_set(struct window *w, struct window_pane *wp,
+     enum pane_lines pane_lines, int cell_type, struct grid_cell *gc)
+ {
+diff --git a/screen-write.c b/screen-write.c
+index 291eb62a..b5eb3a56 100644
+--- a/screen-write.c
++++ b/screen-write.c
+@@ -2916,13 +2916,31 @@ screen_write_alternateon(struct screen_write_ctx *ctx, struct grid_cell *gc,
+ {
+ 	struct tty_ctx		 ttyctx;
+ 	struct window_pane	*wp = ctx->wp;
++	struct screen		*snap = NULL;
+ 
+ 	if (wp != NULL && !options_get_number(wp->options, "alternate-screen"))
+ 		return;
+ 
+ 	screen_write_collect_flush(ctx, 0, __func__);
++
++	if (wp != NULL && !SCREEN_IS_ALTERNATE(ctx->s)) {
++		struct screen_write_ctx	cctx;
++		u_int			sx = screen_size_x(ctx->s);
++		u_int			sy = screen_size_y(ctx->s);
++
++		snap = xcalloc(1, sizeof *snap);
++		screen_init(snap, sx, sy, 0);
++		screen_write_start(&cctx, snap);
++		screen_write_cursormove(&cctx, 0, 0, 0);
++		screen_write_fast_copy(&cctx, ctx->s, 0, 0, sx, sy);
++		screen_write_stop(&cctx);
++	}
++
+ 	screen_alternate_on(ctx->s, gc, cursor);
+ 
++	if (snap != NULL)
++		animation_alt_screen_enter(wp, snap);
++
+ 	if (wp != NULL) {
+ 		layout_fix_panes(wp->window, NULL);
+ 		server_redraw_window_borders(wp->window);
+@@ -2940,13 +2958,31 @@ screen_write_alternateoff(struct screen_write_ctx *ctx, struct grid_cell *gc,
+ {
+ 	struct tty_ctx		 ttyctx;
+ 	struct window_pane	*wp = ctx->wp;
++	struct screen		*snap = NULL;
+ 
+ 	if (wp != NULL && !options_get_number(wp->options, "alternate-screen"))
+ 		return;
+ 
+ 	screen_write_collect_flush(ctx, 0, __func__);
++
++	if (wp != NULL && SCREEN_IS_ALTERNATE(ctx->s)) {
++		struct screen_write_ctx	cctx;
++		u_int			sx = screen_size_x(ctx->s);
++		u_int			sy = screen_size_y(ctx->s);
++
++		snap = xcalloc(1, sizeof *snap);
++		screen_init(snap, sx, sy, 0);
++		screen_write_start(&cctx, snap);
++		screen_write_cursormove(&cctx, 0, 0, 0);
++		screen_write_fast_copy(&cctx, ctx->s, 0, 0, sx, sy);
++		screen_write_stop(&cctx);
++	}
++
+ 	screen_alternate_off(ctx->s, gc, cursor);
+ 
++	if (snap != NULL)
++		animation_alt_screen_exit(wp, snap);
++
+ 	if (wp != NULL) {
+ 		layout_fix_panes(wp->window, NULL);
+ 		server_redraw_window_borders(wp->window);
 diff --git a/server-client.c b/server-client.c
 index 5592b86e..d703de5f 100644
 --- a/server-client.c
@@ -1330,8 +3485,36 @@ index 1e558977..7dcc75bc 100644
  	winlink_stack_remove(&s->lastw, wl);
  	winlink_stack_push(&s->lastw, s->curw);
  	s->curw = wl;
+diff --git a/tmux-anim.gif b/tmux-anim.gif
+new file mode 100644
+index 00000000..8c6001f6
+Binary files /dev/null and b/tmux-anim.gif differ
+diff --git a/tmux.1 b/tmux.1
+index 31eda943..a4df059e 100644
+--- a/tmux.1
++++ b/tmux.1
+@@ -6288,12 +6288,17 @@ of the variable respectively.
+ .Ql q:\&
+ will escape
+ .Xr sh 1
+-special characters or with a
++special characters; with a
+ .Ql h
+ suffix, escape hash characters (so
+ .Ql #
+ becomes
+-.Ql ## ) .
++.Ql ## ) ;
++or with
++.Ql a
++escape
++.Nm
++command arguments.
+ .Ql E:\&
+ will expand the format twice, for example
+ .Ql #{E:status\-left}
 diff --git a/tmux.h b/tmux.h
-index c76df0e3..f742348f 100644
+index c76df0e3..6cdca1d0 100644
 --- a/tmux.h
 +++ b/tmux.h
 @@ -38,6 +38,7 @@
@@ -1362,7 +3545,7 @@ index c76df0e3..f742348f 100644
  void	tty_clipboard_query(struct tty *);
  void	tty_putcode(struct tty *, enum tty_code_code);
  void	tty_putcode_i(struct tty *, enum tty_code_code, int);
-@@ -3056,6 +3063,20 @@ void	 server_add_accept(int);
+@@ -3056,6 +3063,24 @@ void	 server_add_accept(int);
  void printflike(1, 2) server_add_message(const char *, ...);
  int	 server_create_socket(uint64_t, char **);
  
@@ -1379,10 +3562,23 @@ index c76df0e3..f742348f 100644
 +void	 animation_window_pane_layout_begin(struct window *,
 +	     struct window_pane *);
 +void	 animation_window_pane_layout_commit(struct window *);
++void	 animation_alt_screen_enter(struct window_pane *, struct screen *);
++void	 animation_alt_screen_exit(struct window_pane *, struct screen *);
++void	 animation_begin_scroll(struct client *, struct window_pane *,
++	     struct screen *, int, int);
 +
  /* server-client.c */
  RB_PROTOTYPE(client_windows, client_window, entry, server_client_window_cmp);
  u_int	 server_client_how_many(void);
+@@ -3361,6 +3386,8 @@ void	 screen_write_alternateoff(struct screen_write_ctx *,
+ /* screen-redraw.c */
+ void	 screen_redraw_screen(struct client *);
+ void	 screen_redraw_pane(struct client *, struct window_pane *, int);
++void	 screen_redraw_border_set(struct window *, struct window_pane *,
++	     enum pane_lines, int, struct grid_cell *);
+ int	 screen_redraw_is_visible(struct visible_ranges *, u_int);
+ struct visible_ranges *screen_redraw_get_visible_ranges(struct window_pane *,
+ 	     int, int, u_int, struct visible_ranges *);
 diff --git a/tty.c b/tty.c
 index f201ba1d..67032faa 100644
 --- a/tty.c
@@ -1396,3 +3592,61 @@ index f201ba1d..67032faa 100644
  tty_clear_line(struct tty *tty, const struct grid_cell *defaults, u_int py,
      u_int px, u_int nx, u_int bg)
  {
+diff --git a/window-copy.c b/window-copy.c
+index 39ae1881..5ac782a3 100644
+--- a/window-copy.c
++++ b/window-copy.c
+@@ -753,7 +753,10 @@ window_copy_pageup1(struct window_mode_entry *wme, int half_page)
+ {
+ 	struct window_copy_mode_data	*data = wme->data;
+ 	struct screen			*s = &data->screen;
++	struct window_pane		*wp = wme->wp;
++	struct client			*c;
+ 	u_int				 n, ox, oy, px, py;
++	int				 old_oy = (int)data->oy;
+ 
+ 	oy = screen_hsize(data->backing) + data->cy - data->oy;
+ 	ox = window_copy_find_length(wme, oy);
+@@ -793,6 +796,15 @@ window_copy_pageup1(struct window_mode_entry *wme, int half_page)
+ 		window_copy_search_marks(wme, NULL, data->searchregex, 1);
+ 	window_copy_update_selection(wme, 1, 0);
+ 	window_copy_redraw_screen(wme);
++
++	TAILQ_FOREACH(c, &clients, entry) {
++		if (c->session == NULL || c->session->curw == NULL)
++			continue;
++		if (c->session->curw->window != wp->window)
++			continue;
++		animation_begin_scroll(c, wp, data->backing, old_oy,
++		    (int)data->oy);
++	}
+ }
+ 
+ void
+@@ -811,7 +823,10 @@ window_copy_pagedown1(struct window_mode_entry *wme, int half_page,
+ {
+ 	struct window_copy_mode_data	*data = wme->data;
+ 	struct screen			*s = &data->screen;
++	struct window_pane		*wp = wme->wp;
++	struct client			*c;
+ 	u_int				 n, ox, oy, px, py;
++	int				 old_oy = (int)data->oy;
+ 
+ 	oy = screen_hsize(data->backing) + data->cy - data->oy;
+ 	ox = window_copy_find_length(wme, oy);
+@@ -853,6 +868,15 @@ window_copy_pagedown1(struct window_mode_entry *wme, int half_page,
+ 		window_copy_search_marks(wme, NULL, data->searchregex, 1);
+ 	window_copy_update_selection(wme, 1, 0);
+ 	window_copy_redraw_screen(wme);
++
++	TAILQ_FOREACH(c, &clients, entry) {
++		if (c->session == NULL || c->session->curw == NULL)
++			continue;
++		if (c->session->curw->window != wp->window)
++			continue;
++		animation_begin_scroll(c, wp, data->backing, old_oy,
++		    (int)data->oy);
++	}
+ 	return (0);
+ }
+ 
