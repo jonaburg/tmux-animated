@@ -308,8 +308,18 @@ animation_paint_border_cell(struct client *c, struct window *w,
     int x, int y)
 {
 	struct grid_cell	gc, defaults;
+	u_int			statuslines;
+	int			statustop, content_top, content_bot;
 
-	if (x < 0 || y < 0 || x >= (int)c->tty.sx || y >= (int)c->tty.sy)
+	if (x < 0 || x >= (int)c->tty.sx || y < 0 || y >= (int)c->tty.sy)
+		return;
+
+	statuslines = status_line_size(c);
+	statustop = (c->session != NULL && statuslines != 0 &&
+	    options_get_number(c->session->options, "status-position") == 0);
+	content_top = statustop ? (int)statuslines : 0;
+	content_bot = (int)c->tty.sy - (statustop ? 0 : (int)statuslines);
+	if (y < content_top || y >= content_bot)
 		return;
 
 	memcpy(&gc, style, sizeof gc);
