@@ -92,6 +92,15 @@ animation_begin_pane_layout(struct client *c, struct window *w,
 			animation_clone_screen(pa->snapshot, wp->screen);
 			memcpy(&pa->snapshot_palette, &wp->palette,
 			    sizeof pa->snapshot_palette);
+			/*
+			 * colour_palette has int* fields. memcpy is a shallow
+			 * copy; the pane's palette arrays will be freed when
+			 * the pane is destroyed. Null them so colour lookups
+			 * fall through to fg/bg defaults instead of reading
+			 * freed memory.
+			 */
+			pa->snapshot_palette.palette = NULL;
+			pa->snapshot_palette.default_palette = NULL;
 		}
 	}
 	cap->n = i;
