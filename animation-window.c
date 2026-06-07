@@ -555,3 +555,84 @@ animation_window_free(struct animation *a)
 {
 	animation_free_snapshot(&a->sw_src_panes, &a->sw_src_n);
 }
+
+int
+animation_window_close_defer(struct window *w, struct window_pane *wp)
+{
+	struct session			*s;
+	struct client			*c;
+	struct winlink			*wl;
+	struct animation_close_defer	*d;
+	int				 any_curw = 0;
+
+	if (w == NULL || wp == NULL)
+		return (0);
+
+	RB_FOREACH(s, sessions, &sessions) {
+		if (s->curw == NULL || s->curw->window != w)
+			continue;
+		any_curw = 1;
+		if (winlink_count(&s->windows) <= 1)
+			return (0);
+	}
+	if (!any_curw)
+		return (0);
+
+	d = xcalloc(1, sizeof *d);
+	d->w = w;
+	d->wp = wp;
+
+	RB_FOREACH(s, sessions, &sessions) {
+		if (s->curw == NULL || s->curw->window != w)
+			continue;
+		wl = s->curw;
+		if (session_last(s) != 0 &&
+		    session_previous(s, 0) != 0)
+			session_next(s, 0);
+		winlink_stack_remove(&s->lastw, wl);
+	}
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		if (c->animation == NULL)
+			continue;
+		if (c->animation->kind != ANIM_SLIDE_WINDOW)
+			continue;
+		if (c->animation->close_defer != NULL)
+			continue;
+		c->animation->close_defer = d;
+		d->pending++;
+	}
+
+	if (d->pending == 0) {
+		free(d);
+		return (0);
+	}
+
+	window_add_ref(w, "animation_window_close_defer");
+	return (1);
+}
+
+void
+animation_window_close_finalize(struct animation_close_defer *d)
+{
+	struct window		*w;
+	struct window_pane	*wp;
+
+	if (d == NULL)
+		return;
+
+	w = d->w;
+	wp = d->wp;
+
+	animation_window_pane_layout_begin(w, wp);
+	layout_close_pane(wp);
+	window_remove_pane(w, wp);
+	if (TAILQ_EMPTY(&w->panes))
+		server_kill_window(w, 1);
+	else
+		server_redraw_window(w);
+	animation_window_pane_layout_commit(w);
+
+	window_remove_ref(w, "animation_window_close_defer");
+	free(d);
+}

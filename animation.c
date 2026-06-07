@@ -142,6 +142,13 @@ animation_free_cb(struct client *c, void *data)
 	if (c->animation == a)
 		c->animation = NULL;
 
+	if (a->close_defer != NULL) {
+		struct animation_close_defer *d = a->close_defer;
+		a->close_defer = NULL;
+		if (--d->pending <= 0)
+			animation_window_close_finalize(d);
+	}
+
 	switch (a->kind) {
 	case ANIM_PANE_LAYOUT:
 		animation_pane_free(a);

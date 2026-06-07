@@ -1281,6 +1281,7 @@ struct window_pane {
 #define PANE_THEMECHANGED 0x2000
 #define PANE_UNSEENCHANGES 0x4000
 #define PANE_REDRAWSCROLLBAR 0x8000
+#define PANE_DEFERRED_DESTROY 0x10000
 
 	u_int		 sb_slider_y;
 	u_int		 sb_slider_h;
@@ -3076,6 +3077,7 @@ void	 animation_capture_dying_pane(struct window_pane *);
 void	 animation_window_pane_layout_begin(struct window *,
 	     struct window_pane *);
 void	 animation_window_pane_layout_commit(struct window *);
+int	 animation_window_close_defer(struct window *, struct window_pane *);
 void	 animation_alt_screen_enter(struct window_pane *, struct screen *);
 void	 animation_alt_screen_exit(struct window_pane *, struct screen *);
 void	 animation_begin_scroll(struct client *, struct window_pane *,

@@ -45,6 +45,12 @@ enum animation_easing {
 	ANIM_EASE_IN_OUT,
 };
 
+struct animation_close_defer {
+	struct window		*w;
+	struct window_pane	*wp;
+	int			 pending;
+};
+
 struct animation {
 	struct client		*client;
 	enum animation_kind	 kind;
@@ -97,7 +103,11 @@ struct animation {
 	int			 scroll_snap_max_oy;
 
 	struct visible_ranges	 vis;
+
+	struct animation_close_defer *close_defer;
 };
+
+void	 animation_window_close_finalize(struct animation_close_defer *);
 
 /* Shared helpers (animation.c). */
 enum animation_easing	 animation_easing_lookup(struct session *);

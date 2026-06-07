@@ -322,6 +322,9 @@ server_destroy_pane(struct window_pane *wp, int notify)
 	u_int			 sx = screen_size_x(&wp->base);
 	u_int			 sy = screen_size_y(&wp->base);
 
+	if (wp->flags & PANE_DEFERRED_DESTROY)
+		return;
+
 	if (wp->fd != -1) {
 #ifdef HAVE_UTEMPTER
 		utempter_remove_record(wp->fd);
@@ -378,6 +381,14 @@ server_destroy_pane(struct window_pane *wp, int notify)
 
 	server_unzoom_window(w);
 	server_client_remove_pane(wp);
+
+	if (TAILQ_FIRST(&w->panes) == wp && TAILQ_NEXT(wp, entry) == NULL) {
+		if (animation_window_close_defer(w, wp)) {
+			wp->flags |= PANE_DEFERRED_DESTROY;
+			return;
+		}
+	}
+
 	animation_window_pane_layout_begin(w, wp);
 	layout_close_pane(wp);
 	window_remove_pane(w, wp);
