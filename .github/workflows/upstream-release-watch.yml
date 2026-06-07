@@ -1,0 +1,87 @@
+name: upstream-release-watch
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create upstream-release --force \
+            --color 0e8a16 \
+            --description "New upstream tmux release available" \
+            -R ${{ github.repository }} || true
+
+      - name: Find latest upstream stable tag
+        id: tag
+        run: |
+          latest=$(git ls-remote --tags --refs https://github.com/tmux/tmux.git \
+            | awk '{print $2}' \
+            | sed 's|refs/tags/||' \
+            | grep -E '^[0-9]+\.[0-9]+[a-z]?$' \
+            | sort -V \
+            | tail -1)
+          if [ -z "$latest" ]; then
+            echo "Could not parse a stable tag from upstream." >&2
+            exit 1
+          fi
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream stable tag: $latest"
+
+      - name: Open issue if fork lacks matching animated tag
+        uses: actions/github-script@v7
+        env:
+          LATEST: ${{ steps.tag.outputs.latest }}
+        with:
+          script: |
+            const tag = process.env.LATEST;
+            const ourTag = `v${tag}-animated`;
+
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${ourTag}`,
+              });
+              core.info(`Fork already has ${ourTag}; nothing to do.`);
+              return;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
+
+            const title = `Upstream tmux ${tag} available — needs an animated build`;
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'upstream-release',
+              per_page: 100,
+            });
+            if (existing.some(i => i.title === title)) {
+              core.info('Open issue already exists; skipping.');
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body: [
+                `Upstream tmux has tagged [\`${tag}\`](https://github.com/tmux/tmux/releases/tag/${tag}).`,
+                ``,
+                `This fork does not yet have a \`${ourTag}\` tag.`,
+                ``,
+                `Next step: rebase the animation work onto \`${tag}\`, build, and tag the result as \`${ourTag}\`.`,
+              ].join('\n'),
+              labels: ['upstream-release'],
+            });
