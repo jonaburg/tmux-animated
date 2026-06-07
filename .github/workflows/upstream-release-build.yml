@@ -1,0 +1,231 @@
+name: upstream-release-build
+
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream tag to build against (default: latest stable)'
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create upstream-release --force \
+            --color 0e8a16 \
+            --description "New upstream tmux release available" \
+            -R ${{ github.repository }} || true
+
+      - name: Checkout animations (full history)
+        uses: actions/checkout@v4
+        with:
+          ref: animations
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine target tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            latest="${{ inputs.tag }}"
+          else
+            latest=$(git ls-remote --tags --refs https://github.com/tmux/tmux.git \
+              | awk '{print $2}' \
+              | sed 's|refs/tags/||' \
+              | grep -E '^[0-9]+\.[0-9]+[a-z]?$' \
+              | sort -V \
+              | tail -1)
+          fi
+          if [ -z "$latest" ]; then
+            echo "Could not determine upstream tag." >&2
+            exit 1
+          fi
+          echo "tag=$latest" >> "$GITHUB_OUTPUT"
+          echo "branch=v${latest}-animated" >> "$GITHUB_OUTPUT"
+          echo "Target: upstream $latest -> branch v${latest}-animated"
+
+      - name: Bail if fork already has matching tag or branch
+        id: check
+        run: |
+          BRANCH="${{ steps.tag.outputs.branch }}"
+          if git ls-remote --tags --refs origin "refs/tags/$BRANCH" | grep -q .; then
+            echo "Tag $BRANCH already exists; nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git ls-remote --heads origin "$BRANCH" | grep -q .; then
+            echo "Branch $BRANCH already exists; nothing to do."
+            echo "Delete the branch to force a rebuild."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Add upstream remote and fetch tag
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          git remote add upstream https://github.com/tmux/tmux.git
+          git fetch --no-tags upstream "refs/tags/${{ steps.tag.outputs.tag }}:refs/tags/upstream-${{ steps.tag.outputs.tag }}"
+
+      - name: Configure bot identity
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Create branch and merge upstream tag
+        id: merge
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          BRANCH="${{ steps.tag.outputs.branch }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          git checkout -b "$BRANCH"
+          set +e
+          git merge --no-edit --no-ff "upstream-${TAG}" \
+            -m "Merge upstream tmux ${TAG} into animations" > merge.log 2>&1
+          rc=$?
+          set -e
+          if [ $rc -ne 0 ]; then
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Merge conflict"
+              echo ""
+              echo '### git merge output (last 100 lines)'
+              echo '```'
+              tail -n 100 merge.log
+              echo '```'
+              echo ""
+              echo '### Conflicted paths'
+              echo '```'
+              git diff --name-only --diff-filter=U
+              echo '```'
+            } > failure-body.md
+            git merge --abort || true
+            exit 0
+          fi
+          echo "status=merged" >> "$GITHUB_OUTPUT"
+
+      - name: Install build deps
+        if: steps.merge.outputs.status == 'merged'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential autoconf automake pkg-config bison \
+            libevent-dev libncurses-dev libutempter-dev
+
+      - name: Build and smoke test
+        id: build
+        if: steps.merge.outputs.status == 'merged'
+        run: |
+          set +e
+          { ./autogen.sh && ./configure && make -j"$(nproc)" && ./tmux -V; } \
+            > build.log 2>&1
+          rc=$?
+          set -e
+          if [ $rc -ne 0 ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Build failed"
+              echo ""
+              echo '### build output (last 120 lines)'
+              echo '```'
+              tail -n 120 build.log
+              echo '```'
+            } > failure-body.md
+            exit 0
+          fi
+          echo "status=passed" >> "$GITHUB_OUTPUT"
+
+      - name: Push branch on success
+        if: steps.build.outputs.status == 'passed'
+        run: git push --force-with-lease origin "${{ steps.tag.outputs.branch }}"
+
+      - name: Open PR on success
+        if: steps.build.outputs.status == 'passed'
+        uses: actions/github-script@v7
+        env:
+          BRANCH: ${{ steps.tag.outputs.branch }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        with:
+          script: |
+            const branch = process.env.BRANCH;
+            const tag    = process.env.TAG;
+            const title  = `Sync upstream tmux ${tag} into animations`;
+            const body   = [
+              `Automated sync against upstream tag \`${tag}\`.`,
+              ``,
+              `- Merged \`upstream/${tag}\` into \`animations\` on branch \`${branch}\`.`,
+              `- Ran \`./autogen.sh && ./configure && make\` and \`./tmux -V\` on \`ubuntu-latest\`.`,
+              ``,
+              `Tag the merge commit as \`${branch}\` after merging if you want it pinned.`,
+            ].join('\n');
+            const { data: open } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              head:  `${context.repo.owner}:${branch}`,
+              state: 'open',
+            });
+            if (open.length === 0) {
+              await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                head:  branch,
+                base:  'animations',
+                title, body,
+              });
+            } else {
+              core.info(`PR #${open[0].number} already open for ${branch}.`);
+            }
+
+      - name: Open issue on failure
+        if: steps.merge.outputs.status == 'conflict' || steps.build.outputs.status == 'failed'
+        uses: actions/github-script@v7
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          PHASE: ${{ steps.merge.outputs.status == 'conflict' && 'merge' || 'build' }}
+        with:
+          script: |
+            const fs    = require('fs');
+            const tag   = process.env.TAG;
+            const phase = process.env.PHASE;
+            const title = `upstream-release-build: ${phase} failed against tmux ${tag}`;
+            const runLink = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const detail = fs.existsSync('failure-body.md')
+              ? fs.readFileSync('failure-body.md', 'utf8')
+              : '_(no captured log)_';
+            const body = [
+              `Automated attempt to sync \`animations\` with upstream tmux \`${tag}\` failed in the \`${phase}\` phase.`,
+              ``,
+              `Run: ${runLink}`,
+              ``,
+              detail,
+            ].join('\n');
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: 'open',
+              labels: 'upstream-release',
+              per_page: 100,
+            });
+            if (existing.some(i => i.title === title)) {
+              core.info('Open issue already exists; skipping.');
+              return;
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title,
+              body,
+              labels: ['upstream-release'],
+            });
