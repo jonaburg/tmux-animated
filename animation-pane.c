@@ -526,6 +526,18 @@ animation_window_pane_layout_begin(struct window *w,
 }
 
 void
+animation_window_pane_layout_cancel(struct window *w)
+{
+	struct client	*c;
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		struct pane_layout_capture	*cap = c->animation_capture;
+		if (cap != NULL && cap->w == w)
+			animation_free_capture(c);
+	}
+}
+
+void
 animation_window_pane_layout_commit(struct window *w)
 {
 	struct client	*c;

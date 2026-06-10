@@ -627,11 +627,13 @@ animation_window_close_finalize(struct animation_close_defer *d)
 	animation_window_pane_layout_begin(w, wp);
 	layout_close_pane(wp);
 	window_remove_pane(w, wp);
-	if (TAILQ_EMPTY(&w->panes))
+	if (TAILQ_EMPTY(&w->panes)) {
+		animation_window_pane_layout_cancel(w);
 		server_kill_window(w, 1);
-	else
+	} else {
 		server_redraw_window(w);
-	animation_window_pane_layout_commit(w);
+		animation_window_pane_layout_commit(w);
+	}
 
 	window_remove_ref(w, "animation_window_close_defer");
 	free(d);

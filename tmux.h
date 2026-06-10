@@ -3077,6 +3077,7 @@ void	 animation_capture_dying_pane(struct window_pane *);
 void	 animation_window_pane_layout_begin(struct window *,
 	     struct window_pane *);
 void	 animation_window_pane_layout_commit(struct window *);
+void	 animation_window_pane_layout_cancel(struct window *);
 int	 animation_window_close_defer(struct window *, struct window_pane *);
 void	 animation_alt_screen_enter(struct window_pane *, struct screen *);
 void	 animation_alt_screen_exit(struct window_pane *, struct screen *);

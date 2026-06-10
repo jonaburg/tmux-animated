@@ -393,12 +393,13 @@ server_destroy_pane(struct window_pane *wp, int notify)
 	layout_close_pane(wp);
 	window_remove_pane(w, wp);
 
-	if (TAILQ_EMPTY(&w->panes))
+	if (TAILQ_EMPTY(&w->panes)) {
+		animation_window_pane_layout_cancel(w);
 		server_kill_window(w, 1);
-	else
+	} else {
 		server_redraw_window(w);
-
-	animation_window_pane_layout_commit(w);
+		animation_window_pane_layout_commit(w);
+	}
 }
 
 static void
