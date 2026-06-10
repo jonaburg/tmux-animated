@@ -3082,6 +3082,11 @@ void	 animation_alt_screen_enter(struct window_pane *, struct screen *);
 void	 animation_alt_screen_exit(struct window_pane *, struct screen *);
 void	 animation_begin_scroll(struct client *, struct window_pane *,
 	     struct screen *, int, int);
+void	 animation_mode_enter(struct window_pane *, struct screen *,
+	     struct screen *);
+void	 animation_mode_exit(struct window_pane *, struct screen *,
+	     struct screen *);
+void	 animation_clone_screen(struct screen *, struct screen *);
 
 /* server-client.c */
 RB_PROTOTYPE(client_windows, client_window, entry, server_client_window_cmp);

@@ -121,6 +121,20 @@ animation_draw_cb(struct client *c, void *data,
 	case ANIM_SLIDE_WINDOW:
 		animation_window_draw(c, a);
 		break;
+	case ANIM_SCREEN_DISSOLVE: {
+		double t;
+		if (a->duration_ms == 0)
+			t = 1;
+		else {
+			uint64_t now = get_timer();
+			t = (double)(now - a->start_ms) /
+			    (double)a->duration_ms;
+		}
+		if (t < 0) t = 0;
+		if (t > 1) t = 1;
+		animation_dissolve_draw(c, a, t);
+		break;
+	}
 	}
 
 	c->overlay_check = saved_check;
@@ -158,6 +172,9 @@ animation_free_cb(struct client *c, void *data)
 		break;
 	case ANIM_SLIDE_WINDOW:
 		animation_window_free(a);
+		break;
+	case ANIM_SCREEN_DISSOLVE:
+		animation_dissolve_free(a);
 		break;
 	}
 
@@ -250,7 +267,8 @@ animation_frame_cb(__unused int fd, __unused short ev, void *arg)
 	if (dt_ms < 0) dt_ms = 0;
 	a->last_ms = now;
 
-	if (a->kind == ANIM_PANE_LAYOUT || a->kind == ANIM_SCROLL)
+	if (a->kind == ANIM_PANE_LAYOUT || a->kind == ANIM_SCROLL ||
+	    a->kind == ANIM_SCREEN_DISSOLVE)
 		goto check_done;
 
 	switch (a->easing) {

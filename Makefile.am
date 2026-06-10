@@ -88,6 +88,7 @@ dist_tmux_SOURCES = \
 	animation-window.c \
 	animation-pane.c \
 	animation-scroll.c \
+	animation-dissolve.c \
 	arguments.c \
 	attributes.c \
 	cfg.c \

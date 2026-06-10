@@ -7,6 +7,7 @@ enum animation_kind {
 	ANIM_SLIDE_WINDOW,
 	ANIM_PANE_LAYOUT,
 	ANIM_SCROLL,
+	ANIM_SCREEN_DISSOLVE,
 };
 
 enum pane_anim_phase {
@@ -102,6 +103,13 @@ struct animation {
 	double			 scroll_tgt_off;
 	int			 scroll_snap_max_oy;
 
+	/* ANIM_SCREEN_DISSOLVE */
+	struct window_pane	*dissolve_wp;
+	struct screen		*dissolve_old;
+	struct screen		*dissolve_new;
+	struct colour_palette	 dissolve_palette;
+	int			 dissolve_style; /* 0=bayer, 1=hash */
+
 	struct visible_ranges	 vis;
 
 	struct animation_close_defer *close_defer;
@@ -134,10 +142,13 @@ void			 animation_pane_draw(struct client *,
 			     struct animation *, double);
 void			 animation_scroll_draw(struct client *,
 			     struct animation *);
+void			 animation_dissolve_draw(struct client *,
+			     struct animation *, double);
 
 /* Per-kind free entry points called from animation_free_cb. */
 void			 animation_window_free(struct animation *);
 void			 animation_pane_free(struct animation *);
 void			 animation_scroll_free(struct animation *);
+void			 animation_dissolve_free(struct animation *);
 
 #endif

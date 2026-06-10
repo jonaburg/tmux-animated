@@ -1224,7 +1224,14 @@ window_pane_set_mode(struct window_pane *wp, struct window_pane *swp,
 		TAILQ_INSERT_HEAD(&wp->modes, wme, entry);
 		wme->screen = wme->mode->init(wme, fs, args);
 	}
-	wp->screen = wme->screen;
+	{
+		struct screen *old_s = wp->screen;
+		struct screen *new_s = wme->screen;
+
+		wp->screen = new_s;
+		if (old_s != NULL && new_s != NULL && old_s != new_s)
+			animation_mode_enter(wp, old_s, new_s);
+	}
 
 	wp->flags |= (PANE_REDRAW|PANE_REDRAWSCROLLBAR|PANE_CHANGED);
 	layout_fix_panes(w, NULL);
@@ -1247,19 +1254,37 @@ window_pane_reset_mode(struct window_pane *wp)
 
 	wme = TAILQ_FIRST(&wp->modes);
 	TAILQ_REMOVE(&wp->modes, wme, entry);
-	wme->mode->free(wme);
-	free(wme);
 
-	next = TAILQ_FIRST(&wp->modes);
-	if (next == NULL) {
-		wp->flags &= ~PANE_UNSEENCHANGES;
-		log_debug("%s: no next mode", __func__);
-		wp->screen = &wp->base;
-	} else {
-		log_debug("%s: next mode is %s", __func__, next->mode->name);
-		wp->screen = next->screen;
-		if (next->mode->resize != NULL)
-			next->mode->resize(next, wp->sx, wp->sy);
+	{
+		struct screen	 old_snap;
+		int		 have_old_snap = 0;
+		struct screen	*new_s;
+
+		if (wp->screen != NULL) {
+			animation_clone_screen(&old_snap, wp->screen);
+			have_old_snap = 1;
+		}
+
+		wme->mode->free(wme);
+		free(wme);
+
+		next = TAILQ_FIRST(&wp->modes);
+		if (next == NULL) {
+			wp->flags &= ~PANE_UNSEENCHANGES;
+			log_debug("%s: no next mode", __func__);
+			new_s = &wp->base;
+		} else {
+			log_debug("%s: next mode is %s", __func__,
+			    next->mode->name);
+			new_s = next->screen;
+			if (next->mode->resize != NULL)
+				next->mode->resize(next, wp->sx, wp->sy);
+		}
+		wp->screen = new_s;
+		if (have_old_snap && new_s != NULL)
+			animation_mode_exit(wp, &old_snap, new_s);
+		if (have_old_snap)
+			screen_free(&old_snap);
 	}
 
 	wp->flags |= (PANE_REDRAW|PANE_REDRAWSCROLLBAR|PANE_CHANGED);

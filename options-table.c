@@ -386,6 +386,32 @@ const struct options_table_entry options_table[] = {
 	  .text = "Duration in ms of pane layout animations."
 	},
 
+	{ .name = "animation-mode-enter",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 1,
+	  .text = "Dissolve when entering/exiting a window mode "
+		  "(choose-tree, copy-mode, etc.)."
+	},
+
+	{ .name = "animation-mode-enter-duration",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .minimum = 0,
+	  .maximum = 5000,
+	  .default_num = 180,
+	  .text = "Duration in ms of mode enter/exit dissolve."
+	},
+
+	{ .name = "animation-mode-enter-style",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .minimum = 0,
+	  .maximum = 1,
+	  .default_num = 0,
+	  .text = "Dissolve style: 0 = Bayer dither, 1 = hash noise."
+	},
+
 	{ .name = "animation-popup",
 	  .type = OPTIONS_TABLE_FLAG,
 	  .scope = OPTIONS_TABLE_SESSION,
