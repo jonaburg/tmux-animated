@@ -3069,6 +3069,7 @@ void	 animation_begin_window_switch(struct client *, struct winlink *,
 	     struct winlink *);
 void	 animation_retarget(struct client *, struct winlink *);
 void	 animation_cancel(struct client *);
+void	 animation_window_invalidate(struct window *);
 int	 animation_active(struct client *);
 void	 animation_begin_pane_layout(struct client *, struct window *,
 	     struct window_pane *);

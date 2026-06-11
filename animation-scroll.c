@@ -90,6 +90,8 @@ animation_begin_scroll(struct client *c, struct window_pane *wp,
 	grid_duplicate_lines(a->scroll_snap->grid, 0, src->grid, snap_start,
 	    snap_h);
 	memcpy(&a->scroll_palette, &wp->palette, sizeof a->scroll_palette);
+	a->scroll_palette.palette = NULL;
+	a->scroll_palette.default_palette = NULL;
 
 	a->scroll_src_off = (double)(max_oy - old_oy);
 	a->scroll_tgt_off = (double)(max_oy - new_oy);

@@ -55,8 +55,11 @@ animation_begin_window_switch(struct client *c, struct winlink *src,
 		return;
 
 	if (c->animation != NULL) {
-		animation_retarget(c, tgt);
-		return;
+		if (c->animation->kind == ANIM_SLIDE_WINDOW) {
+			animation_retarget(c, tgt);
+			return;
+		}
+		animation_cancel(c);
 	}
 
 	a = xcalloc(1, sizeof *a);

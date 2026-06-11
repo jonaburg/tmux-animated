@@ -43,6 +43,23 @@ animation_cancel(struct client *c)
 	server_client_clear_overlay(c);
 }
 
+void
+animation_window_invalidate(struct window *w)
+{
+	struct client		*c;
+	struct animation	*a;
+
+	if (w == NULL)
+		return;
+	TAILQ_FOREACH(c, &clients, entry) {
+		if ((a = c->animation) == NULL)
+			continue;
+		if (a->tgt_window == w || a->pl_window == w)
+			animation_cancel(c);
+	}
+	animation_window_pane_layout_cancel(w);
+}
+
 int
 animation_active(struct client *c)
 {
@@ -155,6 +172,9 @@ animation_free_cb(struct client *c, void *data)
 
 	if (c->animation == a)
 		c->animation = NULL;
+
+	if (event_initialized(&c->animation_timer))
+		evtimer_del(&c->animation_timer);
 
 	if (a->close_defer != NULL) {
 		struct animation_close_defer *d = a->close_defer;

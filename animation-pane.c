@@ -614,6 +614,8 @@ animation_begin_alt_screen_one(struct client *c, struct window_pane *wp,
 		pa->backdrop = snap;
 		memcpy(&pa->backdrop_palette, &wp->palette,
 		    sizeof pa->backdrop_palette);
+		pa->backdrop_palette.palette = NULL;
+		pa->backdrop_palette.default_palette = NULL;
 	} else {
 		pa->phase = PANE_DYING;
 		pa->src_x = wp->xoff;
@@ -627,11 +629,15 @@ animation_begin_alt_screen_one(struct client *c, struct window_pane *wp,
 		pa->snapshot = snap;
 		memcpy(&pa->snapshot_palette, &wp->palette,
 		    sizeof pa->snapshot_palette);
+		pa->snapshot_palette.palette = NULL;
+		pa->snapshot_palette.default_palette = NULL;
 		if (wp->screen != NULL) {
 			pa->backdrop = xcalloc(1, sizeof *pa->backdrop);
 			animation_clone_screen(pa->backdrop, wp->screen);
 			memcpy(&pa->backdrop_palette, &wp->palette,
 			    sizeof pa->backdrop_palette);
+			pa->backdrop_palette.palette = NULL;
+			pa->backdrop_palette.default_palette = NULL;
 		}
 	}
 
