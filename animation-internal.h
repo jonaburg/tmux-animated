@@ -63,8 +63,7 @@ struct animation {
 	uint64_t		 tau_ms;
 	uint64_t		 frame_interval_ms;
 
-	struct winlink		*src_wl;
-	struct winlink		*tgt_wl;
+	struct window		*tgt_window;
 	int			 axis;
 
 	double			 pos;

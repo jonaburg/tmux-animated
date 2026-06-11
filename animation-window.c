@@ -68,8 +68,7 @@ animation_begin_window_switch(struct client *c, struct winlink *src,
 	a->frame_interval_ms =
 	    options_get_number(s->options, "animation-frame-interval");
 
-	a->src_wl = src;
-	a->tgt_wl = tgt;
+	a->tgt_window = tgt->window;
 	a->axis = (tgt->idx > src->idx) ? +1 : -1;
 
 	a->sx = c->tty.sx;
@@ -157,22 +156,26 @@ void
 animation_retarget(struct client *c, struct winlink *new_tgt)
 {
 	struct animation	*a;
-	struct winlink		*new_src;
+	struct winlink		*old_tgt_wl;
+	int			 old_tgt_idx;
 	uint64_t		 now;
 
 	if (c == NULL || (a = c->animation) == NULL || new_tgt == NULL)
 		return;
-	if (new_tgt == a->tgt_wl)
-		return;
-	new_src = a->tgt_wl;
-	if (new_tgt == new_src)
+	if (new_tgt->window == a->tgt_window)
 		return;
 
 	now = get_timer();
 
-	a->src_wl = new_src;
-	a->tgt_wl = new_tgt;
-	a->axis = (new_tgt->idx > new_src->idx) ? +1 : -1;
+	old_tgt_wl = winlink_find_by_window(&c->session->windows, a->tgt_window);
+	old_tgt_idx = (old_tgt_wl != NULL) ? old_tgt_wl->idx : a->tgt_idx;
+
+	animation_free_snapshot(&a->sw_src_panes, &a->sw_src_n);
+	animation_snapshot_window(a->tgt_window, &a->sw_src_panes,
+	    &a->sw_src_n, &a->sw_src_active);
+
+	a->tgt_window = new_tgt->window;
+	a->axis = (new_tgt->idx > old_tgt_idx) ? +1 : -1;
 
 	a->start_pos = (double)a->sx * a->axis;
 	a->pos = a->start_pos;
@@ -181,12 +184,8 @@ animation_retarget(struct client *c, struct winlink *new_tgt)
 	a->start_ms = now;
 	a->last_ms = now;
 
-	a->src_idx = new_src->idx;
+	a->src_idx = old_tgt_idx;
 	a->tgt_idx = new_tgt->idx;
-
-	animation_free_snapshot(&a->sw_src_panes, &a->sw_src_n);
-	animation_snapshot_window(new_src->window, &a->sw_src_panes,
-	    &a->sw_src_n, &a->sw_src_active);
 
 	animation_scan_status(c, a);
 }
@@ -505,8 +504,8 @@ animation_window_draw(struct client *c, struct animation *a)
 	    a->sw_src_active, &src_cell);
 	src_pal = (src_pa != NULL) ? &src_pa->snapshot_palette : NULL;
 
-	if (a->tgt_wl != NULL && a->tgt_wl->window != NULL)
-		tgt_wp = animation_window_default_cell_live(a->tgt_wl->window,
+	if (a->tgt_window != NULL)
+		tgt_wp = animation_window_default_cell_live(a->tgt_window,
 		    &tgt_cell);
 	else
 		tgt_wp = NULL;
@@ -536,8 +535,8 @@ animation_window_draw(struct client *c, struct animation *a)
 
 	animation_paint_window(c, a->sw_src_panes, a->sw_src_n, src_dx, a->sx,
 	    a->pane_y0, a->pane_h);
-	if (a->tgt_wl != NULL)
-		animation_paint_window_live(c, a->tgt_wl->window, tgt_dx, a->sx,
+	if (a->tgt_window != NULL)
+		animation_paint_window_live(c, a->tgt_window, tgt_dx, a->sx,
 		    a->pane_y0, a->pane_h);
 
 	if (a->status_active && a->duration_ms > 0) {
