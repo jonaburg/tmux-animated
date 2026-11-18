@@ -109,6 +109,7 @@ void
 animation_dissolve_draw(struct client *c, struct animation *a, double t)
 {
 	struct grid_cell	 defaults;
+	struct tty_style_ctx	 sc;
 	u_int			 row, col;
 	u_int			 src_sx_old, src_sy_old;
 	u_int			 src_sx_new, src_sy_new;
@@ -117,6 +118,7 @@ animation_dissolve_draw(struct client *c, struct animation *a, double t)
 	if (a->dissolve_old == NULL || a->dissolve_new == NULL)
 		return;
 	memcpy(&defaults, &grid_default_cell, sizeof defaults);
+	animation_style_ctx(&sc, &defaults, &a->dissolve_palette, NULL);
 
 	src_sx_old = screen_size_x(a->dissolve_old);
 	src_sy_old = screen_size_y(a->dissolve_old);
@@ -148,7 +150,7 @@ animation_dissolve_draw(struct client *c, struct animation *a, double t)
 				tty_draw_line(&c->tty, s, run_start, row,
 				    col - run_start,
 				    a->pane_x0 + run_start, (u_int)vy,
-				    &defaults, &a->dissolve_palette);
+				    &sc);
 				run_src = src;
 				run_start = col;
 			}
@@ -159,7 +161,7 @@ animation_dissolve_draw(struct client *c, struct animation *a, double t)
 			tty_draw_line(&c->tty, s, run_start, row,
 			    sx - run_start,
 			    a->pane_x0 + run_start, (u_int)a->pane_y0 + row,
-			    &defaults, &a->dissolve_palette);
+			    &sc);
 		}
 	}
 }

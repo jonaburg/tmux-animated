@@ -1,3 +1,603 @@
+CHANGES FROM 3.7c TO 3.8
+
+* Many improvements to floating panes:
+
+  - new-pane and split-window can now set the title with -T and border lines
+    with -B, and new-pane -W waits for the pane command to exit;
+
+  - dragging with Ctrl now creates a new floating pane;
+
+  - modal panes may be created with new-pane -O; a window can have one modal
+    pane and it prevents interaction with the other panes while it is active.
+    -C closes the pane when the mouse is clicked outside it and -K sends all
+    keys, including the prefix key, to the pane. -D closes the modal pane with
+    Escape or C-c. A modal pane is now used for the editor in buffer mode;
+
+  - new-pane -A creates a floating pane which remains above a zoomed pane;
+    modal panes do this by default;
+
+  - move-pane and resize-pane can now move and resize floating panes, including
+    mouse dragging;
+
+  - split-window in a floating pane creates a new floating pane that does not
+    overlap the active pane, if possible;
+
+  - break-pane can float a tiled pane, join-pane can tile a floating pane, and
+    swap-pane works with floating panes;
+
+  - choose-tree -h and choose-client -h hide the pane containing the mode, and
+    -k for choose commands kills the pane when the mode exits, which is useful
+    for modes in floating panes;
+
+  - command-prompt -P opens a prompt inside a pane rather than on the status
+    line;
+
+  - pane-border-status has top-floating and bottom-floating, and there are new
+    default bindings under C-b g for common move and resize operations.
+
+* Layout strings now use a JSON subset format which includes floating panes.
+  The old format is still accepted; control mode clients receive old layouts
+  unless they set the new-layouts flag.
+
+* Add remain-on-exit failed-key to keep a pane open after a failed command
+  until a key is pressed.
+
+* Add support for themes and improve default colours:
+
+  - tmux now has builtin light and dark colour themes for terminals with 256 or
+    more colours; a new theme option controls whether tmux detects the terminal
+    theme, uses terminal colours, or forces light or dark (set to terminal for
+    the old colours);
+
+  - styles can use new theme colour names such as themeblack, themewhite and
+    themegreen, and colours in styles are expanded as formats;
+
+  - the terminal's own theme is reported to panes instead of being guessed from
+    the background, and inferred more accurately when theme reporting is not
+    supported (Ayman Bagabas, issue 5343);
+
+  - tree-mode-selection-style has been added, tree mode selection styling now
+    covers the whole line, and built-in modes use improved theme colours.
+
+* Improvements to customize mode:
+
+  - hooks and environment variables are now shown;
+
+  - e opens the selected value in an editor;
+
+  - C toggles showing only changed items;
+
+  - array item keys can now be changed.
+
+* Hooks (and control mode notifications) are now handled internally by using
+  events, each of which may carry keys and values as a payload. The control
+  mode subscriptions mechanism has been extended to allow general-purpose
+  "monitors" which check a format every second and trigger a hook when it
+  changes or becomes true:
+
+  - set-hook -B adds a monitor hook using the same subscription syntax as
+    refresh-client -B, and show-hooks -B lists them. -T runs the hook only when
+    the format is true;
+
+  - wait-for -E waits for hooks, notifications or user events, and set-hook -E
+    fires an event immediately;
+
+  - hooks have additional keys available. wait-for -v can be used to see the
+    keys sent with a hook event;
+
+  - new hooks to cover areas including client create and destroy, pane
+    activity, pane mode and prompt changes, pane movement and resizing, session
+    group changes and window creation, close, swap and zoom;
+
+  - OSC 133 escape sequences now trigger events: pane-command-started,
+    pane-command-finished and pane-shell-prompt.
+
+* Add switch-mode, a fast switcher bound by default to Tab for windows and BTab
+  (S-Tab) for sessions.
+
+* Pane scrollbars now support auto-hide. This replaces the previous modal
+  behaviour where the pane was resized. With auto-hide, the scrollbar appears
+  while scrolling or while hovered and disappears after pane-scrollbars-timeout
+  (Michael Grant).
+
+* Add a clear-on-attach server option. When disabled, tmux does not enter the
+  alternate screen on attach and instead scrolls the existing terminal content
+  into the scrollback buffer so it remains accessible (issue 5508).
+
+* Copy mode can now automatically refresh as pane content changes with the
+  refresh-on, refresh-off and refresh-toggle commands. Automatic refresh is off
+  by default; refresh-now refreshes once and is bound to r. These replace
+  refresh-from-pane (issue 5165).
+
+* Extend the fill-character option so both inside and outside the window can be
+  changed, with a new default for unused areas inside the window.
+
+* Change show-options and show-hooks to use formats and add a -F flag to each.
+
+* Allow individual terminal features to be disabled by adding @ to their names
+  in terminal-features, and add a utf8 feature for terminals which support
+  UTF-8 output.
+
+* Add an appesc terminal feature for mintty's application escape key mode,
+  avoiding unsupported sequences on other terminals (Pete Dietl, issue 5626).
+
+* Preserve existing Ss and Se terminfo capabilities for cursor styles and
+  restoring the default cursor (issue 5476).
+
+* Enable left and right margins for WezTerm and Ghostty (Michael Grant).
+
+* Add a #{A/count:frames} modifier to show a series of frames as an animation
+  in the status line (issue 5412 from Fernando Daciuk).
+
+* Change command templates so %% is escaped for single quotes while %1 remains
+  unquoted, preventing single quotes in session or target names from
+  terminating quoted command sections (reported by Aliz Hammond).
+
+* display-panes is now a mode rather than an overlay, and can be run inside
+  another pane. The -b flag has been removed.
+
+* Add new-window -E, respawn-pane -E and respawn-window -E as more convenient
+  methods to create an empty pane (rather than using '' for the command).
+
+* Add capture-pane -I to include the time each line entered history.
+
+* Various memory leak fixes from Heon Jeong.
+
+* Add a default C-b T binding to change the current pane title.
+
+* Menus now belong to the window, so appear on all clients.
+
+* Dragging over an existing copy mode selection now adjusts it (Michael Grant).
+
+* Rectangle selection in copy mode may extend past the end of the current line
+  to match vi's virtualedit=block behaviour (Mark Kelly, issue 5227).
+
+* With mode-keys set to vi, scrolling in copy mode now keeps the cursor in the
+  same position relative to the text (Arseniy Simonov, issue 5216).
+
+* Copy mode no longer exits at the bottom while a selection is in progress
+  (issue 5349).
+
+* Add copy-mode-current-line-style to set the style of the line containing the
+  cursor in copy mode (issue 5391).
+
+* Copy mode word commands now recognise all Unicode whitespace characters; a
+  space in word-separators matches any Unicode whitespace character (issue
+  5562).
+
+* Add style attributes for dimming colours (dim=) and for hyperlinks (link= and
+  nolink) (issues 4842 and 4280 from Moritz Angermann).
+
+* New format modifiers: O: loops over options, V: loops over environments,
+  the I modifier reports client terminal information, t/d gives a time
+  difference in seconds, c/f and c/b emit colours, and the m operator supports
+  multiple terms and fuzzy matching.
+
+* Add or improve format variables including client_colours,
+  pane_start_command_list, window_manual_width, window_manual_height,
+  pane_last_output_time, pane_modal_flag, window_modal_pane, pane_private_modes,
+  pane_output_generation, history_added, history_collected, history_generation,
+  hook_fire_count and hook_fire_time.
+
+* Add additional pane sort orders, and a z sort order for choose-tree so
+  floating panes can be sorted by z-index.
+
+* Add -f filters to kill-pane -a, kill-window -a and kill-session -a (issue
+  4782).
+
+* Allow server ACLs to use groups as well as users (issue 4917).
+
+* The mouse option now defaults to on.
+
+* The active-pane client flag has been removed.
+
+* Fix send-keys -K so keys are inserted in the correct place in the input
+  queue, like keys from key bindings (issue 3476).
+
+* Fix control mode clients hanging on exit if pty data was still queued (Ben
+  Maurer, issue 5356), and avoid sending notifications to clients which are
+  already exiting (Ben Maurer, issue 5357). Queue notifications so they are not
+  sent inside %begin/%end (issue 5458), do not let a stuck client prevent the
+  server from exiting (issue 5444), and reset control mode offsets when a pane
+  is respawned (issue 5498). Bound buffered command replies so a control mode
+  client that stops reading cannot consume unlimited memory (issue 5565), and
+  fix a collision between the output discard and bracketed paste flags (issue
+  5622).
+
+* Fix grouped sessions sometimes being left as unusable command targets while
+  they are being killed (Bryce Miller, issue 5180), and prevent reuse of a
+  session with no windows while detaching (Heon Jeong, issue 5620).
+
+* Free wait-for clients when they disconnect and do not run their remaining
+  queued commands (issue 5614).
+
+* Expand formats in run-shell -c like other start-directory flags (reported by
+  Saul Nogueras).
+
+* Fix session alert flag formats to check all windows (issue 5599).
+
+* Do not clear the marked pane when clicking on a pane border.
+
+* Fix choose mode filtering when more than one pane exists (issue 5326), and
+  fix an infinite loop in customize mode when a filter does not match.
+
+* Preserve the scroll position in tree modes when rebuilding the list
+  (Kim A Brandt, issue 5631).
+
+* Fix regsub when the pattern is anchored at the start (issue 5341).
+
+* Fix redraw issues around synchronized updates, copy mode, tabs, padding,
+  status lines, menus, popups, wide characters and floating panes. This
+  includes fixes for flicker with alternate screen applications and scrollbars
+  (Michael Grant, issue 5351; Noam Stolero, issue 5350; Aung Myo Kyaw, issue
+  5098), and misplaced wrapped lines during partial redraws (Ben Maurer, issue
+  5625).
+
+* Do not crash looking for the next or previous session (issue 5344), or when
+  no client is available.
+
+* Fix crashes when destroying a zoomed pane (Romain Francoise, issue 5591),
+  copying from a blank source pane (Kaixuan Li), or opening a mode prompt when
+  the client is offset into the window.
+
+* Avoid an infinite loop when assigning a width to WCHAR_MAX (issue 5602).
+
+CHANGES FROM 3.7b TO 3.7c
+
+* Build with jemalloc on macOS to avoid what appears to be a bug in calloc
+  (issue 5385).
+
+* Fix scrollbar initial state so they appear on new windows (issue 5339).
+
+* Check time periodically in loops rather than every one (issue 5367).
+
+* Use message-style again as default for message-format.
+
+* Unzoom before creating floating panes to avoid a crash.
+
+CHANGES FROM 3.7a TO 3.7b
+
+* Fix so that the end of a synchronized update again triggers a redraw.
+
+CHANGES FROM 3.7 TO 3.7a
+
+* Fix crash in break-pane when no name is provided.
+
+* Scrollbar options are now cached rather than being looked up for every redraw
+  (issue 5298).
+
+* Only forbid #( in names, allow #[, empty names, : and .
+
+CHANGES FROM 3.6b TO 3.7
+
+* Add floating panes. These are panes which sit above the layout ("tiled
+  panes") like popups but unlike popups are not modal and behave like panes (so
+  the same escape sequence support). Floating panes are created with the
+  new-pane command, bound to * by default.
+
+  This is an early release of this feature and they are relatively limited.
+  Currently floating panes can only be moved and resized using the mouse. The
+  default second status line (if status-format is set to 2) has changed to show
+  a list of panes. Many obvious features are not yet available for floating
+  panes (notably the ability to swap floating panes, resize them using
+  resize-pane, change them between floating and tiles, and restore custom
+  layouts with floating panes).
+
+  Mostly written by Michael Grant with help from Dane Jensen; testing and fixes
+  from others.
+
+* Allow run-shell arguments after a shell command to be expanded as #{1}, #{2}
+  and so on (from Rasmus Thystrup Karstensen in issue 5121).
+
+* Add -g to kill-session to kill all sessions in a session group (issue 5157
+  from github at jiku dot jp).
+
+* Tighten up read-only checks on attach-session, detach-client and
+  switch-client so that a user should be able to only detach their own client
+  (reported by John Walker).
+
+* Increase escape delay if the buffer contains a partial paste end, fixes
+  issues with at least Windows Terminal (from jing dot empty at gmail.com issue
+  5088).
+
+* When mode-keys is set to vi, do not allow the cursor to go into the invisible
+  extra cell to the right of the visible text; this is closer to what vi(1)
+  does (from Max Vim in issue 5070).
+
+* Add a five second limit on pasting for terminals which mysteriously lose the
+  end sequence if the paste is too big (that is, Terminal.app) (reported by
+  Garri Djavadyan in issue 4527).
+
+* Show file open errors more sensibly (reported by Meriel Luna Mittelbach in
+  issue 5081).
+
+* Update supported features list for Foot terminal (from Meriel Luna Mittelbach
+  in issue 5079).
+
+* Turn off the "is this a paste" guessing if the terminal supports bracket
+  pasting instead (issue 5031).
+
+* Check FIONREAD for all panes not just piped panes.
+
+* Add emacs-style recentre-top-bottom command to copy mode (issue 5053 from
+  sinyax75 at gmail dot com).
+
+* Allow the indicator in tree mode to be customized by two new options:
+  tree-mode-preview-format and tree-mode-preview-style.
+
+* Fix control client hang on exit after toggling no-output (issue 5049 from
+  Aaron Campbell). Also various other control mode fixes.
+
+* Add support for line numbers in copy mode. There is a new
+  copy-mode-line-numbers option which may be set to off, default (tmux's normal
+  line numbering where 0 is the top visible line), absolute (first line in
+  history is 1), relative (relative to the cursor) and hybrid (current line is
+  absolute, others relative). Also adds copy-mode-line-number-style and
+  copy-mode-current-line-number-style to set the style of the line numbers.
+  When copy mode is entered with the mouse, line numbers stay off. From Leo
+  Henon in issue 5025.
+
+* Make C-[ have the same bindings as Escape for terminals with extended
+  keys where they are different (issue 5035 from Eric Nicolas).
+
+* Sanitize paste buffer names in paste_set and paste_rename (issue 5032 from
+  Barrett Ruth).
+
+* Do not hang in run-shell when job_run fails (from Barrett Ruth in issue
+  5037).
+
+* Add ability to forward progress bar to outside terminal (issue 4972
+  from Eric Dorland).
+
+* Translate keypad keys to text in prompt input (from Barrett Ruth in issue
+  4996).
+
+* Sanitize pane titles and window and session names more consistently and
+  strictly, prevents C0 characters and other invisible characters causing
+  problems (reported by Chris Monardo in issue 4999).
+
+* Make clock visible on terminals without colours (from Manuel Einfalt in issue
+  5001).
+
+* Add detach to default session menu (suggested by Przemyslaw Sztoch).
+
+* Include window format variables for pane notifications (issue 5007 from Saul
+  Nogueras).
+
+* Limit precision to 100 for formats to stop silly formats from running out of
+  memory, reported by z1281552865 at gmail dot com. Also various other similar
+  changes, mostly found by OSS-Fuzz.
+
+* Add WAYLAND_DISPLAY to default update-environment (issue 4965). Also some
+  additional XDG_* variables (issue 5169).
+
+* Add -C flag to command-prompt to match display-message -C (do not freeze
+  panes) (from Barrett Ruth in issue 4978).
+
+* Cache user from getpwuid because it can be very expensive on some
+  platforms (from Ben Maurer in issue 4973).
+
+* Add remain-on-exit key to keep pane around until a key is pressed (from
+  Michael Grant).
+
+* Add some new mouse ranges called "control0" to "control9" and use to add some
+  mouse controls to the pane state line (from Dane Jensen with some bits from
+  Michael Grant).
+
+* Handle OSC 9;4 progress bar sequence and store in format variables (from Eric
+  Dorland in issue 4954).
+
+* Correctly size buffer used for parsing clipboard sequences (from Michal
+  Majchrowicz).
+
+* Limit MSG_COMMAND argument to between 0 and 1000 to prevent a misbehaving
+  client from crashing the server (from Michal Majchrowicz).
+
+* Reorganize host keys are represented internally so they can be built more
+  easily (from Dane Jensen in issue 4953).
+
+* Add new fuzzers for command parsing, formats and styles (from David
+  Korczynski in issue 4957). Also fix various issues shown from these.
+
+* Add bracket_paste_flag format flag (from George Nachman in issue 4951).
+
+* Use \- for hyphens in tmux.1 to cause newer groff versions to render them
+  correctly (from Keith Thompson in issue 4948).
+
+* Various minor code improvements and fixes from Pavel Lavrukhin (issue 4936
+  and others).
+
+* Use window options for cursor-style to avoid crash when no pane (from Arden
+  Packeer in issue 4942).
+
+* Fix issue where popup window gets overwritten by background updates (from
+  Conor Taylor in issue 4920).
+
+* Protect against overflow when scrollbar is off screen (from san65384 at gmail
+  dot com in issue 4933).
+
+* Copy hyperlinks when redrawing popup so they do not vanish (from Antoine
+  Gaudreau Simard in issue 4925).
+
+* Work around systemd killing panes early during system shutdown by creating
+  dependencies from the panes to the service which started tmux (issue 4926
+  from Dmitry Torokhov).
+
+* Allow codepoint-widths to accept ranges (from san65384 at gmail dot com in
+  issue 4930).
+
+* Add a short builtin help text for each mode accessible with C-h (based on
+  code from Patrick Motard in issue 4751).
+
+* Draw message as one format, allowing prompts and messages to occupy only a
+  portion of the status bar, overlaying the normal status content rather than
+  replacing the entire line. A new message-format option now controls the
+  entire message (like status-format). The message-style option now need to
+  include "fill" in order to cover the whole width (the default has
+  "fill=yellow"). From Conor Taylor in issue 4861.
+
+* Add next/previous variables for windows in W: loop (from Conor Taylor in
+  issue 4856).
+
+* Various bug and memory leak fixes from Renaud Allard (issue 4916).
+
+* Add pane_pipe_pid with pipe file descriptor.
+
+* Make -c work with new-session -A (from Jody Frankowski in issue 4906).
+
+* Allow copy mode to work for readonly clients, except for copy commands (from
+  Dane Jensen).
+
+* Pass paste buffer through vis(3) when pasting to prevent buffers containing
+  for example the bracket end sequence causing issues, a new -S flag disables
+  (reported by Mason Davis).
+
+* Add sorting (-O flag) and a custom format (-F) to list-keys (from Dane Jensen
+  in issue 4845).
+
+* Add scroll-exit-on, scroll-exit-off, scroll-exit-toggle commands to copy mode
+  (from xcdnlgd at hotmail dot com in issue 4884).
+
+* Respond to DECRQM 2026 (from David Turnbull in issue 4887) and various others
+  (from Ayman Bagabas in issue 5118).
+
+* Fix various memory leaks reported by Huihui Huang (issue 4872).
+
+* Pass which clipboard is set through to the terminal (from Axel Lindskog in
+  issue 4858).
+
+* Reuse extended entry when clearing RGB cell, to prevent memory growth when
+  cells are repeatedly cleared (from Michael K Darling in issue 4862).
+
+* Do not write before buffer when parsing empty clipboard or palette replies,
+  or try to allocate zero bytes with an empty clipboard sequence (reported by
+  DongHan Kim).
+
+* Various bug fixes and code improvements from Conor Taylor (issue 4848).
+
+* Clear search counts when clearing marks in case of repeated search (reported
+  by Daniel Pereira in issue 4817).
+
+* Make OSC 52 work in popups (from gogongxt at 163 dot com in issue 4797).
+
+* Refresh copy mode when style changes (from Josh Cooper in issue 4830).
+
+* Make sorting code common and add -O for sorting to the list commands (from
+  Dane Jensen in issue 4813).
+
+* Do not treat cells as empty unless the background colour stays the same,
+  fixes invisible clock in clock mode (reported by Theo Buehler).
+
+* When history-limit is changed, apply to existing panes, not just new
+  ones (issue 4705).
+
+* Reevaluate menu and popup styles on each draw to allow them to change when
+  options change (from Josh Cooper in issues 4828 and 4829).
+
+* Handle theme keys earlier so they are processed even if a popup is open (from
+  Josh Cooper in issue 4827).
+
+* Fix window-size=latest not resizing on switch-client in session groups (from
+  Ilya Grigoriev in issue 4818).
+
+* Add -e flag to command-prompt to close if empty (from Dane Jensen in issue
+  4812).
+
+* Correctly draw indicators when pane-border-indicators is set to both
+  (reported by Ilya Grigoriev in issue 4780).
+
+* Remember last pane or type of location for double and triple clicks and
+  correctly handle it changes between first and second or second and third
+  (issue 4795 from Shaobo Song).
+
+* Add paste to the default pane menu (issue 4763).
+
+* Reduce request timeout to 500 milliseconds to match the extended escape-time,
+  and discard palette requests if receiving a reply for a different index.
+
+* Extend escape timeout if there are active forwarded requests not just
+  tmux's own requests (issue 4793).
+
+* Correct redrawing of wide characters when overwritten (reported by Jake
+  Stewart in issue 4737).
+
+* If cannot find a terminator for palette responses, treat as a partial key not
+  complete (issue 4749).
+
+* Do not send theme unless it has changed, and do not send immediately when
+  updates are enabled (issue 5787).
+
+* Do not use ;;s in list-keys output as it is confusing and cannot be
+  parsed on input (from Patrick Motard in issue 4750).
+
+* Redraw pane borders when entering or leaving alternate screen (from Mike
+  Jonkmans in issue 4788).
+
+* Add focus-follows-mouse option (from Barry Wasdell in issue 4771).
+
+* Add selection_mode format variable for copy mode (from Mike Jonkmans in issue
+  4773).
+
+* Add prompt-command-cursor-style (from Joshua Cooper in issue 4765).
+
+* With status-keys vi, move the cursor left by one when pressing Escape to
+  enter command mode, like vi (issue 4767 from Joshua Cooper).
+
+* Add {current}/{active} for -t for current window or active pane (from Manuel
+  Einfalt, issue 4766).
+
+* Add support for applications to use synchronized output mode (DECSET 2026) to
+  prevent screen tearing during rapid updates (from Chris Lloyd in issue 4744).
+
+* Do not set a default prompt cursor colour because some terminals (urxvt, st)
+  do not support the reset sequence (issue 4759).
+
+* Add a scroll-to-mouse command for copy mode to scroll to the mouse position
+  and bind to the scrollbar, brings the scrollbar keys into line with the other
+  mouse keys (from Michael Grant in issue 4731).
+
+* Bump the maximum number of SIXEL images to 20.
+
+* Fix key code for M-BSpace (issue 4717).
+
+* Fix calculation of scaled SIXEL size (from nincsnevem662 at gmail dot com in
+  issue 4739). Also various other fixes and improvements for SIXEL.
+
+* Fix a race between fork and pane_current_path, most noticeable on systems
+  where starting processes is slow (issue 4719).
+
+* Fix mouse position calculation on scrollbar with pane status line at the top
+  (issue 4738 from Michael Grant).
+
+* Do not read outside buffer if format is a single #, and do not loop forever
+  if UTF-8 is unfinished in a format (reported by Giorgi Kobakhia in issue
+  4735).
+
+* Add a missing skin tone character (from Jake Stewart in issue 4736).
+
+* Allow UTF-8 characters to be combined in either order (reported by Jake
+  Stewart in issue 4726).
+
+* Do not show scrollbar when entering copy mode from a pane in the alternate
+  screen (issue 4728 from Michael Grant).
+
+* Fix the size calculation for left-right windows used to spread out cells
+  horizontally evenly (from Michael Grant in issue 4724).
+
+* Add a get-clipboard option which when enabled (the default is off) and a
+  clipboard is requested from a pane, requests it from the terminal and
+  forwards to the requesting pane; also remove the now-redundant
+  forward-to-pane ability from "refresh-client -l" (issue 4275).
+
+* Fix the noattr attribute in styles, used by the default mode-style (issue
+  4713).
+
+* Do not remove TERM for commands run from config file (regression reported by
+  Dennis Eriksen).
+
+* Add seconds options for clock mode (from augustus7613 dot mail at pm dot me,
+  issue 4697; later improved by Joao Pedro in issue 4760).
+
 CHANGES FROM 3.6a TO 3.6b
 
 * Remove images from the correct list when they are removed while in the

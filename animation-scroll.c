@@ -116,6 +116,7 @@ animation_scroll_draw(struct client *c, struct animation *a)
 {
 	double			 t, off;
 	struct grid_cell	 defaults;
+	struct tty_style_ctx	 sc;
 	int			 row_off;
 	u_int			 y;
 
@@ -134,6 +135,7 @@ animation_scroll_draw(struct client *c, struct animation *a)
 	    (a->scroll_tgt_off - a->scroll_src_off);
 	row_off = (int)lround(off);
 	memcpy(&defaults, &grid_default_cell, sizeof defaults);
+	animation_style_ctx(&sc, &defaults, &a->scroll_palette, a->scroll_snap);
 
 	for (y = 0; y < a->pane_h; y++) {
 		int src_y = row_off + (int)y;
@@ -143,7 +145,7 @@ animation_scroll_draw(struct client *c, struct animation *a)
 		tty_draw_line(&c->tty, a->scroll_snap, 0,
 		    (u_int)src_y, a->pane_w,
 		    a->pane_x0, a->pane_y0 + y,
-		    &defaults, &a->scroll_palette);
+		    &sc);
 	}
 }
 

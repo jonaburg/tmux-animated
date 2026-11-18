@@ -44,8 +44,8 @@ and installs to `/usr/local/bin/tmux-animated`. Requires `cc`,
 ```bash
 git clone https://github.com/tmux/tmux.git
 cd tmux
-git checkout <commit-the-patch-was-made-against>
-curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/patches/tmux-animated-next-3.7.patch | patch -p1
+git checkout 3.8
+curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/patches/tmux-animated-3.8.patch | patch -p1
 ./autogen.sh && ./configure && make
 ```
 

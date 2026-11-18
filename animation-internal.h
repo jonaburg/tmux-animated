@@ -122,12 +122,14 @@ double			 animation_ease_cubic_in_out(double);
 void			 animation_clone_screen(struct screen *,
 			     struct screen *);
 uint64_t		 get_timer(void);
+void			 animation_style_ctx(struct tty_style_ctx *,
+			     const struct grid_cell *, struct colour_palette *,
+			     struct screen *);
 
 /* Overlay callbacks live in animation.c and are used by every begin_*. */
 struct visible_ranges	*animation_check_cb(struct client *, void *,
 			     u_int, u_int, u_int);
-void			 animation_draw_cb(struct client *, void *,
-			     struct screen_redraw_ctx *);
+void			 animation_draw_cb(struct client *, void *);
 int			 animation_key_cb(struct client *, void *,
 			     struct key_event *);
 void			 animation_free_cb(struct client *, void *);
