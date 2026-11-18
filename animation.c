@@ -105,8 +105,7 @@ animation_check_cb(struct client *c, void *data, u_int px, u_int py, u_int nx)
 }
 
 void
-animation_draw_cb(struct client *c, void *data,
-    __unused struct screen_redraw_ctx *rctx)
+animation_draw_cb(struct client *c, void *data)
 {
 	struct animation	*a = data;
 	overlay_check_cb	 saved_check;
@@ -314,6 +313,18 @@ check_done:
 	tv.tv_sec = 0;
 	tv.tv_usec = (long)a->frame_interval_ms * 1000L;
 	evtimer_add(&c->animation_timer, &tv);
+}
+
+/* Fill a tty style context for drawing a snapshot or live screen. */
+void
+animation_style_ctx(struct tty_style_ctx *sc, const struct grid_cell *defaults,
+    struct colour_palette *palette, struct screen *s)
+{
+	memset(sc, 0, sizeof *sc);
+	sc->defaults = defaults;
+	sc->palette = palette;
+	if (s != NULL)
+		sc->hyperlinks = s->hyperlinks;
 }
 
 void

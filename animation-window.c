@@ -199,6 +199,7 @@ animation_paint_window(struct client *c, struct pane_anim *panes, size_t n,
 {
 	struct pane_anim	*pa;
 	struct grid_cell	 defaults;
+	struct tty_style_ctx	 sc;
 	int			 dst_x, src_px, nx;
 	u_int			 sy, vy;
 	size_t			 i;
@@ -225,10 +226,11 @@ animation_paint_window(struct client *c, struct pane_anim *panes, size_t n,
 			vy = (u_int)pa->src_y + sy;
 			if (vy < view_y0 || vy >= view_y0 + view_h)
 				continue;
+			animation_style_ctx(&sc, &defaults,
+			    &pa->snapshot_palette, pa->snapshot);
 			tty_draw_line(&c->tty, pa->snapshot,
 			    (u_int)src_px, sy, (u_int)nx,
-			    (u_int)dst_x, vy,
-			    &defaults, &pa->snapshot_palette);
+			    (u_int)dst_x, vy, &sc);
 		}
 	}
 }
@@ -255,6 +257,7 @@ animation_paint_window_live(struct client *c, struct window *w, int dx,
 {
 	struct window_pane	*wp;
 	struct grid_cell	 defaults;
+	struct tty_style_ctx	 sc;
 	int			 dst_x, src_px, nx;
 	u_int			 sy, vy;
 
@@ -273,15 +276,15 @@ animation_paint_window_live(struct client *c, struct window *w, int dx,
 		if (nx <= 0)
 			continue;
 
-		tty_default_colours(&defaults, wp);
+		animation_style_ctx(&sc, &defaults, &wp->palette, wp->screen);
+		tty_default_colours(&defaults, wp, &sc.dim);
 		for (sy = 0; sy < wp->sy; sy++) {
 			vy = wp->yoff + sy;
 			if (vy < view_y0 || vy >= view_y0 + view_h)
 				continue;
 			tty_draw_line(&c->tty, wp->screen,
 			    (u_int)src_px, sy, (u_int)nx,
-			    (u_int)dst_x, vy,
-			    &defaults, &wp->palette);
+			    (u_int)dst_x, vy, &sc);
 		}
 	}
 }
@@ -294,7 +297,7 @@ animation_window_default_cell_live(struct window *w, struct grid_cell *out)
 	memcpy(out, &grid_default_cell, sizeof *out);
 	if (w == NULL || (wp = w->active) == NULL)
 		return (NULL);
-	tty_default_colours(out, wp);
+	tty_default_colours(out, wp, NULL);
 	return (wp);
 }
 
@@ -405,12 +408,14 @@ animation_paint_status_copy_cell(struct client *c, u_int sx, u_int sy,
     u_int tx, u_int ty)
 {
 	struct grid_cell	gc, defaults;
+	struct tty_style_ctx	sc;
 
 	grid_view_get_cell(c->status.screen.grid, sx, sy, &gc);
 	if (gc.flags & GRID_FLAG_PADDING)
 		return;
 	memcpy(&defaults, &grid_default_cell, sizeof defaults);
-	tty_attributes(&c->tty, &gc, &defaults, NULL, NULL);
+	animation_style_ctx(&sc, &defaults, NULL, NULL);
+	tty_attributes(&c->tty, &gc, &sc);
 	tty_cursor(&c->tty, tx, ty);
 	if (gc.data.size == 0)
 		tty_putc(&c->tty, ' ');
@@ -423,6 +428,7 @@ animation_paint_status_cell(struct client *c, u_int sx, u_int sy, u_int tx,
     u_int ty, const struct grid_cell *style)
 {
 	struct grid_cell	gc, defaults;
+	struct tty_style_ctx	sc;
 
 	grid_view_get_cell(c->status.screen.grid, sx, sy, &gc);
 	if (gc.flags & GRID_FLAG_PADDING)
@@ -431,7 +437,8 @@ animation_paint_status_cell(struct client *c, u_int sx, u_int sy, u_int tx,
 	gc.bg = style->bg;
 	gc.attr = style->attr;
 	memcpy(&defaults, &grid_default_cell, sizeof defaults);
-	tty_attributes(&c->tty, &gc, &defaults, NULL, NULL);
+	animation_style_ctx(&sc, &defaults, NULL, NULL);
+	tty_attributes(&c->tty, &gc, &sc);
 	tty_cursor(&c->tty, tx, ty);
 	if (gc.data.size == 0)
 		tty_putc(&c->tty, ' ');
@@ -517,6 +524,7 @@ animation_window_draw(struct client *c, struct animation *a)
 	{
 		const struct grid_cell	*fill_cell;
 		struct colour_palette	*fill_pal;
+		struct tty_style_ctx	 sc;
 
 		if (tgt_pal != NULL) {
 			fill_cell = &tgt_cell;
@@ -528,9 +536,9 @@ animation_window_draw(struct client *c, struct animation *a)
 			fill_cell = &grid_default_cell;
 			fill_pal = NULL;
 		}
+		animation_style_ctx(&sc, fill_cell, fill_pal, NULL);
 		for (vy = a->pane_y0; vy < a->pane_y0 + a->pane_h; vy++) {
-			tty_attributes(&c->tty, fill_cell, fill_cell, fill_pal,
-			    NULL);
+			tty_attributes(&c->tty, fill_cell, &sc);
 			tty_cursor(&c->tty, 0, vy);
 			tty_repeat_space(&c->tty, a->sx);
 		}
@@ -633,6 +641,7 @@ animation_window_close_finalize(struct animation_close_defer *d)
 		animation_window_pane_layout_cancel(w);
 		server_kill_window(w, 1);
 	} else {
+		window_pop_zoom(w);
 		server_redraw_window(w);
 		animation_window_pane_layout_commit(w);
 	}

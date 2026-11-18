@@ -280,12 +280,14 @@ animation_paint_pane_clipped(struct client *c, struct screen *s,
     int dst_x, int dst_y, int dst_w, int dst_h)
 {
 	struct grid_cell	defaults;
+	struct tty_style_ctx	sc;
 	u_int			sy, src_sx, src_sy;
 	int			nx;
 
 	if (s == NULL || dst_w <= 0 || dst_h <= 0)
 		return;
 	memcpy(&defaults, &grid_default_cell, sizeof defaults);
+	animation_style_ctx(&sc, &defaults, palette, s);
 
 	src_sx = screen_size_x(s);
 	src_sy = screen_size_y(s);
@@ -300,7 +302,7 @@ animation_paint_pane_clipped(struct client *c, struct screen *s,
 		if (vy < 0 || vy >= (int)c->tty.sy)
 			continue;
 		tty_draw_line(&c->tty, s, 0, sy, (u_int)nx,
-		    (u_int)dst_x, (u_int)vy, &defaults, palette);
+		    (u_int)dst_x, (u_int)vy, &sc);
 	}
 }
 
@@ -310,6 +312,7 @@ animation_paint_border_cell(struct client *c, struct window *w,
     int x, int y)
 {
 	struct grid_cell	gc, defaults;
+	struct tty_style_ctx	sc;
 	u_int			statuslines;
 	int			statustop, content_top, content_bot;
 
@@ -325,12 +328,13 @@ animation_paint_border_cell(struct client *c, struct window *w,
 		return;
 
 	memcpy(&gc, style, sizeof gc);
-	screen_redraw_border_set(w, NULL, pane_lines, cell_type, &gc);
+	window_get_border_cell(NULL, pane_lines, cell_type, &gc);
 	memcpy(&defaults, &grid_default_cell, sizeof defaults);
+	animation_style_ctx(&sc, &defaults, NULL, NULL);
 
-	tty_attributes(&c->tty, &gc, &defaults, NULL, NULL);
+	tty_attributes(&c->tty, &gc, &sc);
 	tty_cursor(&c->tty, (u_int)x, (u_int)y);
-	tty_cell(&c->tty, &gc, &defaults, NULL, NULL);
+	tty_cell(&c->tty, &gc, &sc);
 }
 
 static void
@@ -360,23 +364,23 @@ animation_paint_pane_border(struct client *c, struct window *w, int active,
 
 	for (px = lx; px < lx + lw; px++) {
 		animation_paint_border_cell(c, w, pane_lines, &style,
-		    CELL_LEFTRIGHT, px, top);
+		    CELL_LR, px, top);
 		animation_paint_border_cell(c, w, pane_lines, &style,
-		    CELL_LEFTRIGHT, px, bot);
+		    CELL_LR, px, bot);
 	}
 	for (py = ly; py < ly + lh; py++) {
 		animation_paint_border_cell(c, w, pane_lines, &style,
-		    CELL_TOPBOTTOM, left, py);
+		    CELL_UD, left, py);
 		animation_paint_border_cell(c, w, pane_lines, &style,
-		    CELL_TOPBOTTOM, right, py);
+		    CELL_UD, right, py);
 	}
-	animation_paint_border_cell(c, w, pane_lines, &style, CELL_TOPLEFT,
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_RD,
 	    left, top);
-	animation_paint_border_cell(c, w, pane_lines, &style, CELL_TOPRIGHT,
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_LD,
 	    right, top);
-	animation_paint_border_cell(c, w, pane_lines, &style, CELL_BOTTOMLEFT,
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_RU,
 	    left, bot);
-	animation_paint_border_cell(c, w, pane_lines, &style, CELL_BOTTOMRIGHT,
+	animation_paint_border_cell(c, w, pane_lines, &style, CELL_LU,
 	    right, bot);
 }
 
@@ -395,15 +399,16 @@ animation_pane_draw(struct client *c, struct animation *a, double t)
 	{
 		struct grid_cell	cell;
 		struct window_pane	*wp;
+		struct tty_style_ctx	sc;
 		memcpy(&cell, &grid_default_cell, sizeof cell);
 		wp = (a->pl_window != NULL) ? a->pl_window->active : NULL;
 		if (wp != NULL)
-			tty_default_colours(&cell, wp);
+			tty_default_colours(&cell, wp, NULL);
 		memcpy(&fill, &cell, sizeof fill);
+		animation_style_ctx(&sc, &fill, wp ? &wp->palette : NULL, NULL);
 		for (vy = a->pane_y0; vy < (int)(a->pane_y0 + a->pane_h);
 		    vy++) {
-			tty_attributes(&c->tty, &fill, &fill,
-			    wp ? &wp->palette : NULL, NULL);
+			tty_attributes(&c->tty, &fill, &sc);
 			tty_cursor(&c->tty, a->pane_x0, (u_int)vy);
 			tty_repeat_space(&c->tty, a->pane_w);
 		}
