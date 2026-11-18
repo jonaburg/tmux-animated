@@ -12,11 +12,11 @@
 set -euo pipefail
 
 REPO_RAW="https://raw.githubusercontent.com/jonaburg/tmux-animated/animations"
-PATCH_NAME="tmux-animated-next-3.7.patch"
+PATCH_NAME="tmux-animated-3.8.patch"
 TMUX_REPO="https://github.com/tmux/tmux.git"
-# The upstream commit the patch was generated against. TODO: Update this when
-# the patch is rebased onto a new upstream tmux.
-TMUX_REF="f43adc36"
+# The upstream tag the patch was generated against. Update this when the
+# patch is rebased onto a new upstream tmux.
+TMUX_REF="3.8"
 
 PREFIX="${PREFIX:-/usr/local}"
 BIN_NAME="tmux-animated"
@@ -104,7 +104,7 @@ say "Bootstrapping"
 say "Configuring (prefix=$PREFIX)"
 EXTRA_CONFIGURE=""
 if [ "$(uname -s)" = "Darwin" ]; then
-    EXTRA_CONFIGURE="--disable-utf8proc"
+    EXTRA_CONFIGURE="--disable-utf8proc --disable-jemalloc"
 fi
 ./configure --prefix="$PREFIX" $EXTRA_CONFIGURE >/dev/null
 
