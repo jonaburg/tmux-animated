@@ -65,14 +65,17 @@ if [ "${#missing[@]}" -gt 0 ]; then
             esac
             ;;
         Darwin)
-            echo "  brew install pkg-config autoconf automake libevent ncurses" >&2
+            echo "  brew install pkg-config autoconf automake libevent ncurses jemalloc" >&2
             ;;
     esac
     exit 1
 fi
 
 if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
-    export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+    # tmux 3.8+ uses jemalloc on macOS to work around calloc(3) not always
+    # zeroing allocations.
+    brew list jemalloc >/dev/null 2>&1 || err "jemalloc is required on macOS: brew install jemalloc"
+    export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix jemalloc)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 fi
 
 
@@ -104,7 +107,7 @@ say "Bootstrapping"
 say "Configuring (prefix=$PREFIX)"
 EXTRA_CONFIGURE=""
 if [ "$(uname -s)" = "Darwin" ]; then
-    EXTRA_CONFIGURE="--disable-utf8proc --disable-jemalloc"
+    EXTRA_CONFIGURE="--disable-utf8proc --enable-jemalloc"
 fi
 ./configure --prefix="$PREFIX" $EXTRA_CONFIGURE >/dev/null
 

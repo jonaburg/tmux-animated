@@ -37,7 +37,8 @@ curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/i
 
 Clones tmux at the tracked upstream version, applies the patch, builds,
 and installs to `/usr/local/bin/tmux-animated`. Requires `cc`,
-`autoconf`, `automake`, `pkg-config`, `libevent`, `ncurses`.
+`autoconf`, `automake`, `pkg-config`, `libevent`, `ncurses`, and on
+macOS `jemalloc` (`brew install jemalloc`).
 
 ### Apply the patch to your own tmux build
 
@@ -48,6 +49,8 @@ git checkout 3.8
 curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/patches/tmux-animated-3.8.patch | patch -p1
 ./autogen.sh && ./configure && make
 ```
+
+On macOS, use the `configure` flags from [Build from source](#build-from-source).
 
 The patch in `patches/` should be regenerated against each upstream tmux
 release; the filename indicates which.
@@ -60,6 +63,22 @@ cd tmux-animated
 ./autogen.sh && ./configure && make
 sudo make install
 ```
+
+On macOS, tmux 3.8+ refuses to configure unless you choose a malloc and a
+Unicode library, because the system `calloc(3)` does not always zero
+allocations and the system Unicode tables mishandle emoji. Build against
+Homebrew's jemalloc and utf8proc:
+
+```bash
+brew install pkg-config autoconf automake libevent ncurses jemalloc utf8proc
+export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix jemalloc)/lib/pkgconfig:$(brew --prefix utf8proc)/lib/pkgconfig"
+./autogen.sh && ./configure --enable-jemalloc --enable-utf8proc && make
+```
+
+`otool -L tmux | grep jemalloc` confirms it linked. If you change
+configure flags on an existing tree, run `make clean` first: the flags
+are passed on the compiler command line, so `make` alone will not
+rebuild anything.
 
 ## Configure
 

@@ -109,10 +109,10 @@ index 9a2f6ff7..00000000
 -files have a license and copyright notice at their start.
 diff --git a/README.md b/README.md
 new file mode 100644
-index 00000000..9ceaa5da
+index 00000000..fc45123c
 --- /dev/null
 +++ b/README.md
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,132 @@
 +# tmux-animated
 +
 +![tmux-animated demo](tmux-anim.gif)
@@ -152,7 +152,8 @@ index 00000000..9ceaa5da
 +
 +Clones tmux at the tracked upstream version, applies the patch, builds,
 +and installs to `/usr/local/bin/tmux-animated`. Requires `cc`,
-+`autoconf`, `automake`, `pkg-config`, `libevent`, `ncurses`.
++`autoconf`, `automake`, `pkg-config`, `libevent`, `ncurses`, and on
++macOS `jemalloc` (`brew install jemalloc`).
 +
 +### Apply the patch to your own tmux build
 +
@@ -163,6 +164,8 @@ index 00000000..9ceaa5da
 +curl -fsSL https://raw.githubusercontent.com/jonaburg/tmux-animated/animations/patches/tmux-animated-3.8.patch | patch -p1
 +./autogen.sh && ./configure && make
 +```
++
++On macOS, use the `configure` flags from [Build from source](#build-from-source).
 +
 +The patch in `patches/` should be regenerated against each upstream tmux
 +release; the filename indicates which.
@@ -175,6 +178,22 @@ index 00000000..9ceaa5da
 +./autogen.sh && ./configure && make
 +sudo make install
 +```
++
++On macOS, tmux 3.8+ refuses to configure unless you choose a malloc and a
++Unicode library, because the system `calloc(3)` does not always zero
++allocations and the system Unicode tables mishandle emoji. Build against
++Homebrew's jemalloc and utf8proc:
++
++```bash
++brew install pkg-config autoconf automake libevent ncurses jemalloc utf8proc
++export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix jemalloc)/lib/pkgconfig:$(brew --prefix utf8proc)/lib/pkgconfig"
++./autogen.sh && ./configure --enable-jemalloc --enable-utf8proc && make
++```
++
++`otool -L tmux | grep jemalloc` confirms it linked. If you change
++configure flags on an existing tree, run `make clean` first: the flags
++are passed on the compiler command line, so `make` alone will not
++rebuild anything.
 +
 +## Configure
 +
@@ -2577,10 +2596,10 @@ index 641792e2..7ecaeb3f 100644
  
 diff --git a/install.sh b/install.sh
 new file mode 100755
-index 00000000..03d26aff
+index 00000000..5c3915fb
 --- /dev/null
 +++ b/install.sh
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,124 @@
 +#!/usr/bin/env bash
 +# tmux-animated installer.
 +#
@@ -2648,14 +2667,17 @@ index 00000000..03d26aff
 +            esac
 +            ;;
 +        Darwin)
-+            echo "  brew install pkg-config autoconf automake libevent ncurses" >&2
++            echo "  brew install pkg-config autoconf automake libevent ncurses jemalloc" >&2
 +            ;;
 +    esac
 +    exit 1
 +fi
 +
 +if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
-+    export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
++    # tmux 3.8+ uses jemalloc on macOS to work around calloc(3) not always
++    # zeroing allocations.
++    brew list jemalloc >/dev/null 2>&1 || err "jemalloc is required on macOS: brew install jemalloc"
++    export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix jemalloc)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 +fi
 +
 +
@@ -2687,7 +2709,7 @@ index 00000000..03d26aff
 +say "Configuring (prefix=$PREFIX)"
 +EXTRA_CONFIGURE=""
 +if [ "$(uname -s)" = "Darwin" ]; then
-+    EXTRA_CONFIGURE="--disable-utf8proc --disable-jemalloc"
++    EXTRA_CONFIGURE="--disable-utf8proc --enable-jemalloc"
 +fi
 +./configure --prefix="$PREFIX" $EXTRA_CONFIGURE >/dev/null
 +
