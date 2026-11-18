@@ -19,15 +19,21 @@ window switches, pane splits, resizes, and closes.
 
 ## Install
 
-### Homebrew (macOS / Linuxbrew)
+### Homebrew (macOS / Linuxbrew) — recommended
 
 ```bash
-brew tap jonaburg/tmux-animated
-brew install tmux-animated
+brew install jonaburg/tmux-animated/tmux-animated
 ```
 
 Installs as `tmux-animated`, leaving any existing `tmux` binary in
-place. Run `tmux-animated` instead of `tmux`, or alias it.
+place. Run `tmux-animated` instead of `tmux`, or alias it. The formula
+builds the latest tagged release (`v3.8-animated`) and pulls in
+`libevent`, `ncurses`, `utf8proc` and, on macOS, `jemalloc`.
+
+```bash
+brew upgrade tmux-animated                                   # newer releases
+brew install --HEAD jonaburg/tmux-animated/tmux-animated     # tip of the animations branch
+```
 
 ### One-shot install script
 

@@ -109,10 +109,10 @@ index 9a2f6ff7..00000000
 -files have a license and copyright notice at their start.
 diff --git a/README.md b/README.md
 new file mode 100644
-index 00000000..fc45123c
+index 00000000..3dbf87dc
 --- /dev/null
 +++ b/README.md
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,138 @@
 +# tmux-animated
 +
 +![tmux-animated demo](tmux-anim.gif)
@@ -134,15 +134,21 @@ index 00000000..fc45123c
 +
 +## Install
 +
-+### Homebrew (macOS / Linuxbrew)
++### Homebrew (macOS / Linuxbrew) — recommended
 +
 +```bash
-+brew tap jonaburg/tmux-animated
-+brew install tmux-animated
++brew install jonaburg/tmux-animated/tmux-animated
 +```
 +
 +Installs as `tmux-animated`, leaving any existing `tmux` binary in
-+place. Run `tmux-animated` instead of `tmux`, or alias it.
++place. Run `tmux-animated` instead of `tmux`, or alias it. The formula
++builds the latest tagged release (`v3.8-animated`) and pulls in
++`libevent`, `ncurses`, `utf8proc` and, on macOS, `jemalloc`.
++
++```bash
++brew upgrade tmux-animated                                   # newer releases
++brew install --HEAD jonaburg/tmux-animated/tmux-animated     # tip of the animations branch
++```
 +
 +### One-shot install script
 +
